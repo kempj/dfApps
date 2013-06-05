@@ -12,20 +12,27 @@
 #define CHECK 1
 #define MEASURE 1
 
-void Print_Matrix(double *v, int numBlocks, int size);
-void ProcessDiagonalBlock(double *A, int L1, int size);
-void ProcessBlockOnRow(double *A, double *D, int L1, int L3, int size);
-void ProcessBlockOnColumn(double *A, double *D, int L1, int L2, int size);
-void ProcessInnerBlock(double *A, double *remain, double *C, int L1, int L2, int L3, int size);
-void InitMatrix2(double *A, int size);
-void InitMatrix3(double *A, int size);
+void Print_Matrix(double * const v, const int numBlocks, const int size);
+//void ProcessDiagonalBlock(double *A, int L1, int size);
+void ProcessDiagonalBlock(double * const A, const int L1, const int size);
+//void ProcessBlockOnRow(double *A, double *D, int L1, int L3, int size);
+void ProcessBlockOnRow(double * const A, const double * const D, const int L1, const int L3, const int size);
+//void ProcessBlockOnColumn(double *A, double *D, int L1, int L2, int size);
+void ProcessBlockOnColumn(double * const A, const double * const D, const int L1, const int L2, const int size);
+//void ProcessInnerBlock(double *A, double *remain, double *C, int L1, int L2, int L3, int size);
+void ProcessInnerBlock(double * const A, const double * const remain, const double * const C, const int L1, const int L2, const int L3, const int size);
+void InitMatrix2(double *A, const int size);
+void InitMatrix3(double *A, const int size);
 
-void stage1(double *A, int offset, int *sizedim, int *start, int size, int numBlocks);
-void stage2(double *A, int offset, int *sizedim, int *start, int size, int numBlocks);
-void stage3(double *A, int offset, int *sizedim, int *start, int size, int numBlocks);
+//void stage1(double *A, const int offset, int *sizedim, int *start, const int size, const int numBlocks);
+void stage1(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks);
+//void stage2(double *A, int offset, int *sizedim, int *start, int size, int numBlocks);
+void stage2(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks);
+//void stage3(double *A, int offset, int *sizedim, int *start, int size, int numBlocks);
+void stage3(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks);
 
-void LU(double *A, int size, int numBlocks);
-void checkResult(double *A, double *A2, int size);
+void LU(double * const A, const int size, const int numBlocks);
+void checkResult(double * const A, const double * const A2, const int size);
 
 unsigned long GetTickCount()
 {
@@ -54,7 +61,6 @@ int main (int argc, char *argv[])
     }
 
     InitMatrix3( A, size );
-
     memcpy( A2, A, size*size*sizeof(double) );
     LU( A, size, numBlocks);
 #ifdef CHECK
@@ -65,7 +71,7 @@ int main (int argc, char *argv[])
     return 0;
 }
 
-void LU(double *A, int size, int numBlocks) {
+void LU(double * const A, const int size, const int numBlocks) {
     double t1, t2;
     int i, j, k, remain;
     int itr = 0, offset = 0, Block = 1;
@@ -108,12 +114,12 @@ void LU(double *A, int size, int numBlocks) {
     free(sizedim);
 }
 
-void checkResult(double *A, double *A2, int size) {
+void checkResult(double * const A, const double * const A2, const int size) {
     int i, j, k, temp2, temp = 0;
     double *L = (double*)calloc( size*size, sizeof(double) );
     double *U = (double*)calloc( size*size, sizeof(double) );
 
-    if(L== NULL || U==NULL ) {
+    if( L==NULL || U==NULL ) {
         printf( "Can't allocate memory\n" );
         exit(1);
     }
@@ -142,24 +148,25 @@ void checkResult(double *A, double *A2, int size) {
 }
 
 // always start[0] is 0, so it is not used;
-void stage1(double *A, int offset, int *sizedim, int *start, int size, int numBlocks)
+void stage1(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks)
 {
     ProcessDiagonalBlock(&A[offset*size+offset], sizedim[0], size);
 }
 
-void stage2(double *A, int offset, int *sizedim, int *start, int size, int numBlocks)
+void stage2(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks)
 {
-    int B, i, L1, L2, L3;
-    B = L1 = sizedim[0]; 
+    int i, L1, L2, L3;
+    //int B = sizedim[0]; 
+    L1 = sizedim[0]; 
     /* Processing only one big block in column and row */
     for(i=1;i<numBlocks;i++){
         L2 = sizedim[i];
         L3 = sizedim[i];
-#pragma omp task firstprivate(i, L1, L2, offset, size)
+#pragma omp task firstprivate(i, L1, L2, offset, size, start)
         ProcessBlockOnColumn( &A[(offset+start[i])*size + offset],
                               &A[ offset          *size + offset],
                               L1, L2, size );
-#pragma omp task firstprivate(i, L1, L2, offset, size)
+#pragma omp task firstprivate(i, L1, L3, offset, size, start)
         ProcessBlockOnRow( &A[offset*size+(offset+start[i])],
                            &A[offset*size+offset],
                            L1, L3, size );
@@ -167,15 +174,15 @@ void stage2(double *A, int offset, int *sizedim, int *start, int size, int numBl
 #pragma omp taskwait
 }
 
-void stage3(double *A, int offset, int *sizedim, int *start, int size, int numBlocks)
+void stage3(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks)
 {
-    int i, j, B, L1, L2, L3;
-    B = L1 = sizedim[0];
+    int i, j, L1, L2, L3;
+    L1 = sizedim[0];
     for(i=1; i < numBlocks; i++)
         for(j=1; j < numBlocks; j++){
             L2 = sizedim[i];
             L3 = sizedim[j];
-#pragma omp task firstprivate(i,j,numBlocks,size,offset,L1,L2,L3)
+#pragma omp task firstprivate(i,j,numBlocks,size,offset,L1,L2,L3, start)
             ProcessInnerBlock( &A[(offset+start[i])*size + (offset+start[j])],
                                &A[ offset          *size + (offset+start[j])], 
                                &A[(offset+start[i])*size + offset], 
@@ -188,7 +195,7 @@ void stage3(double *A, int offset, int *sizedim, int *start, int size, int numBl
  * The size of the diagonal block is L1xL1 
  * size is the size of the matrix in one dimension 
  */
-void ProcessDiagonalBlock(double *A, int L1, int size)
+void ProcessDiagonalBlock(double * const A, const int L1, const int size)
 {
     int i,j,k;
     for(i=0;i<L1;i++)
@@ -205,7 +212,7 @@ void ProcessDiagonalBlock(double *A, int L1, int size)
  * The size of the column block is L2xL1 
  * The size of the diagonal block is L1xL1 
  */
-void ProcessBlockOnColumn(double *A, double *D, int L1, int L2, int size)
+void ProcessBlockOnColumn(double * const A, const double * const D, const int L1, const int L2, const int size)
 {
     int i,j,k;
     for(i=0;i<L1;i++)
@@ -222,7 +229,7 @@ void ProcessBlockOnColumn(double *A, double *D, int L1, int L2, int size)
  * The size of the row block is L1xL3 
  * The size of the diagonal block is L1xL1 
  */
-void ProcessBlockOnRow(double *A, double *D, int L1, int L3, int size)
+void ProcessBlockOnRow(double * const A, const double * const D, const int L1, const int L3, const int size)
 {
     int i,j,k;
     for(i=0;i<L1;i++)
@@ -239,7 +246,7 @@ void ProcessBlockOnRow(double *A, double *D, int L1, int L3, int size)
  * The size of the column block is L2xL1 
  * The size of the inner block is L2xL3 
  */
-void ProcessInnerBlock(double *A, double *remain, double *C, int L1, int L2, int L3, int size)
+void ProcessInnerBlock( double * const A, const double * const remain, const double * const C, const int L1, const int L2, const int L3, const int size)
 {
     int i,j,k;
     for(i=0;i<L1;i++)
@@ -249,7 +256,7 @@ void ProcessInnerBlock(double *A, double *remain, double *C, int L1, int L2, int
                 A[j*size+k]+=-C[j*size+i]*remain[i*size+k];
 }
 
-void Print_Matrix (double *v, int numBlocks, int size)
+void Print_Matrix (double * const v, const int numBlocks, const int size)
 {
     int i,j;
     printf( "\n" );
@@ -261,7 +268,7 @@ void Print_Matrix (double *v, int numBlocks, int size)
     printf( "\n" );
 }
 
-void InitMatrix2(double *A, int size)
+void InitMatrix2(double *A, const int size)
 {
     long long i, j, k;
     //for(i = 0; i < size*size; i++) A[i] = 0;
@@ -271,7 +278,7 @@ void InitMatrix2(double *A, int size)
                 A[i*size + j] += 1;
 }
 
-void InitMatrix3(double *A, int size)
+void InitMatrix3(double *A, const int size)
 {
     long long i, j, k;
     double *L, *U;
