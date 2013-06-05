@@ -13,22 +13,15 @@
 #define MEASURE 1
 
 void Print_Matrix(double * const v, const int numBlocks, const int size);
-//void ProcessDiagonalBlock(double *A, int L1, int size);
 void ProcessDiagonalBlock(double * const A, const int L1, const int size);
-//void ProcessBlockOnRow(double *A, double *D, int L1, int L3, int size);
 void ProcessBlockOnRow(double * const A, const double * const D, const int L1, const int L3, const int size);
-//void ProcessBlockOnColumn(double *A, double *D, int L1, int L2, int size);
 void ProcessBlockOnColumn(double * const A, const double * const D, const int L1, const int L2, const int size);
-//void ProcessInnerBlock(double *A, double *remain, double *C, int L1, int L2, int L3, int size);
 void ProcessInnerBlock(double * const A, const double * const remain, const double * const C, const int L1, const int L2, const int L3, const int size);
 void InitMatrix2(double *A, const int size);
 void InitMatrix3(double *A, const int size);
 
-//void stage1(double *A, const int offset, int *sizedim, int *start, const int size, const int numBlocks);
 void stage1(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks);
-//void stage2(double *A, int offset, int *sizedim, int *start, int size, int numBlocks);
 void stage2(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks);
-//void stage3(double *A, int offset, int *sizedim, int *start, int size, int numBlocks);
 void stage3(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks);
 
 void LU(double * const A, const int size, const int numBlocks);
@@ -66,8 +59,8 @@ int main (int argc, char *argv[])
 #ifdef CHECK
     checkResult( A, A2, size);
 #endif
-    free(A);
-    free(A2);
+    //free(A);
+    //free(A2);
     return 0;
 }
 
@@ -84,7 +77,7 @@ void LU(double * const A, const int size, const int numBlocks) {
 
     remain = size;
     t1 = GetTickCount();
-#pragma omp parallel
+#pragma omp parallel 
     {
 #pragma omp master
         {
@@ -110,8 +103,8 @@ void LU(double * const A, const int size, const int numBlocks) {
     ProcessDiagonalBlock( &A[offset*size+offset], size-offset, size );
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000);
-    free(start);
-    free(sizedim);
+    //free(start);
+    //free(sizedim);
 }
 
 void checkResult(double * const A, const double * const A2, const int size) {
@@ -143,8 +136,8 @@ void checkResult(double * const A, const double * const A2, const int size) {
                 temp++;
         }
     printf("Errors = %d \n", temp);
-    free(L);
-    free(U);
+    //free(L);
+    //free(U);
 }
 
 // always start[0] is 0, so it is not used;
@@ -162,11 +155,11 @@ void stage2(double * const A, const int offset, const int * const sizedim, const
     for(i=1;i<numBlocks;i++){
         L2 = sizedim[i];
         L3 = sizedim[i];
-#pragma omp task firstprivate(i, L1, L2, offset, size, start)
+#pragma omp task firstprivate(i, L1, L2, offset, size)
         ProcessBlockOnColumn( &A[(offset+start[i])*size + offset],
                               &A[ offset          *size + offset],
                               L1, L2, size );
-#pragma omp task firstprivate(i, L1, L3, offset, size, start)
+#pragma omp task firstprivate(i, L1, L3, offset, size)
         ProcessBlockOnRow( &A[offset*size+(offset+start[i])],
                            &A[offset*size+offset],
                            L1, L3, size );
@@ -182,7 +175,7 @@ void stage3(double * const A, const int offset, const int * const sizedim, const
         for(j=1; j < numBlocks; j++){
             L2 = sizedim[i];
             L3 = sizedim[j];
-#pragma omp task firstprivate(i,j,numBlocks,size,offset,L1,L2,L3, start)
+#pragma omp task firstprivate(i,j,numBlocks,size,offset,L1,L2,L3)
             ProcessInnerBlock( &A[(offset+start[i])*size + (offset+start[j])],
                                &A[ offset          *size + (offset+start[j])], 
                                &A[(offset+start[i])*size + offset], 
@@ -290,7 +283,7 @@ void InitMatrix3(double *A, const int size)
     }
 #pragma omp parallel 
     {
-#pragma omp forprivate(i,j)
+#pragma omp for private(i,j)
         for(i = 0; i < size; i++)
             for(j = 0; j < size; j++){
                 //A[i*size + j] = 0;
@@ -303,43 +296,12 @@ void InitMatrix3(double *A, const int size)
                 else
                     U[i*size + j] = 0;
             }
-#pragma omp forprivate(i,j,k)
+#pragma omp for private(i,j,k)
         for(i = 0; i < size; i++)
             for(j = 0; j < size; j++)
                 for(k = 0; k < size; k++)
                     A[i*size + j] += L[i*size + k] * U[k*size + j];
     }
-    free(L);
-    free(U);
+    //free(L);
+    //free(U);
 }
-
-    /*   /\* LU DECOMPOSITION *\/ */
-    /*   for(k=0;k<size-1;k++){ */
-    /*     for(i=k+1;i<size;i++){ */
-    /*       A[i*size+k] = A[i*size+k]/A[k*size+k]; */
-    /*    /\*  for(i=k+1;i<size;i++) *\/ */
-    /*       for(j=k+1;j<size;j++) */
-    /*         A[i*size+j] = A[i*size+j] - A[i*size+k]*A[k*size+j]; */
-    /*     } */
-    /*   } */
-
-/*void InitMatrix(double *A, int size)
-  {
-  long long	i, j;
-  struct timeval	InitTime;
-
-  gettimeofday(&InitTime, NULL);
-
-  srand(InitTime.tv_sec * 1000000 + InitTime.tv_usec);
-
-  for(i = 0; i < size; i++) {
-  for(j = 0; j < size; j++) {
-  A[i * size + j] = ( rand() - remainAsizeD_numBlocksAX/2) / (remainAsizeD_numBlocksAX/1000 );
-  if (i == j) {
-  A[i * size + i] *= 10;
-  }
-//A[i*size+j]=i+j+1;
-}
-}
-} 
-*/
