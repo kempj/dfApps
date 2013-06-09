@@ -4,13 +4,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <omp.h>
 #include <math.h>
 #include <sys/time.h>
 
-//#define DEBUG 1
-#define CHECK 1
-#define MEASURE 1
+#include <hpx/hpx_main.hpp>
+#include <hpx/include/lcos.hpp>
+#include <hpx/include/actions.hpp>
+//#include <hpx/include/components.hpp>
+#include <hpx/include/iostreams.hpp>
+//#include <hpx/include/compression_snappy.hpp>
+
+#include <vector>
+//#include <list>
+//#include <set>
+
+//#include <boost/ref.hpp>
+//#include <boost/foreach.hpp>
+//#include <boost/format.hpp>
 
 void Print_Matrix(double * const v, const int numBlocks, const int size);
 void ProcessDiagonalBlock(double * const A, const int L1, const int size);
@@ -26,6 +36,10 @@ void stage3(double * const A, const int offset, const int * const sizedim, const
 
 void LU(double * const A, const int size, const int numBlocks);
 void checkResult(double * const A, const double * const A2, const int size);
+
+HPX_PLAIN_ACTION(ProcessBlockOnColumn);
+HPX_PLAIN_ACTION(ProcessBlockOnRow);
+//HPX_PLAIN_ACTION(ProcessInnerBlock, innerBlock_action);
 
 unsigned long GetTickCount()
 {
@@ -56,9 +70,7 @@ int main (int argc, char *argv[])
     InitMatrix3( A, size );
     memcpy( A2, A, size*size*sizeof(double) );
     LU( A, size, numBlocks);
-#ifdef CHECK
     checkResult( A, A2, size);
-#endif
     free(A);
     free(A2);
     return 0;
@@ -77,28 +89,22 @@ void LU(double * const A, const int size, const int numBlocks) {
 
     remain = size;
     t1 = GetTickCount();
-#pragma omp parallel 
-    {
-#pragma omp master
-        {
-            while(size-offset > numBlocks){
-                for(i=0; i < numBlocks; i++){
-                    if(i < remain%numBlocks){
-                        sizedim[i] = remain/numBlocks+1;
-                        start[i]   = (remain/numBlocks+1)*i;
-                    } else {
-                        sizedim[i] = remain/numBlocks;
-                        start[i]   = (remain/numBlocks+1)*(remain%numBlocks) +
-                                     (remain/numBlocks)*(i-remain%numBlocks);
-                    }
-                }
-                stage1( A, offset, sizedim, start, size, numBlocks );
-                stage2( A, offset, sizedim, start, size, numBlocks );
-                stage3( A, offset, sizedim, start, size, numBlocks );
-                offset += sizedim[0];
-                remain = remain-sizedim[0];
+    while(size-offset > numBlocks){
+        for(i=0; i < numBlocks; i++){
+            if(i < remain%numBlocks){
+                sizedim[i] = remain/numBlocks+1;
+                start[i]   = (remain/numBlocks+1)*i;
+            } else {
+                sizedim[i] = remain/numBlocks;
+                start[i]   = (remain/numBlocks+1)*(remain%numBlocks) +
+                    (remain/numBlocks)*(i-remain%numBlocks);
             }
         }
+        stage1( A, offset, sizedim, start, size, numBlocks );
+        stage2( A, offset, sizedim, start, size, numBlocks );
+        stage3( A, offset, sizedim, start, size, numBlocks );
+        offset += sizedim[0];
+        remain = remain-sizedim[0];
     }
     ProcessDiagonalBlock( &A[offset*size+offset], size-offset, size );
     t2 = GetTickCount();
@@ -140,7 +146,6 @@ void checkResult(double * const A, const double * const A2, const int size) {
     free(U);
 }
 
-// always start[0] is 0, so it is not used;
 void stage1(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks)
 {
     ProcessDiagonalBlock(&A[offset*size+offset], sizedim[0], size);
@@ -148,102 +153,98 @@ void stage1(double * const A, const int offset, const int * const sizedim, const
 
 void stage2(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks)
 {
-    int i, L1, L2, L3;
+    int L1, L2, L3;
     L1 = sizedim[0]; 
-    /* Processing only one big block in column and row */
-    for(i=1;i<numBlocks;i++){
+
+    using hpx::lcos::future;
+    using hpx::lcos::wait;
+    //using hpx::async;
+    ProcessBlockOnColumn_action blockCol;
+    ProcessBlockOnRow_action blockRow;
+
+    future<void>* futures = new future<void>[2*numBlocks];
+
+    for(int i=1;i<numBlocks;i++){
         L2 = sizedim[i];
         L3 = sizedim[i];
-#pragma omp task firstprivate(i, L1, L2, offset, size)
-        ProcessBlockOnColumn( &A[(offset+start[i])*size + offset],
-                              &A[ offset          *size + offset],
-                              L1, L2, size );
-#pragma omp task firstprivate(i, L1, L3, offset, size)
-        ProcessBlockOnRow( &A[offset*size+(offset+start[i])],
-                           &A[offset*size+offset],
-                           L1, L3, size );
+        futures[2*i] = hpx::async(blockCol, hpx::find_here(),
+                                      &A[(offset+start[i])*size + offset],
+                                      &A[ offset          *size + offset],
+                                      L1, L2, size ) ;
+        //ProcessBlockOnColumn( &A[(offset+start[i])*size + offset],
+        //                      &A[ offset          *size + offset],
+        //                      L1, L2, size );
+        futures[2*i+1] = hpx::async(blockRow, hpx::find_here(),
+                                      &A[offset*size+(offset+start[i])],
+                                      &A[offset*size+offset],
+                                      L1, L3, size ) ;
+        //ProcessBlockOnRow( &A[offset*size+(offset+start[i])],
+        //                   &A[offset*size+offset],
+        //                   L1, L3, size );
     }
-#pragma omp taskwait
+    //std::vector<future<void>> f(&futures[0], &futures[0] + numBlocks);
+    //wait(f);
 }
 
 void stage3(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks)
 {
-    int i, j, L1, L2, L3;
+    int L1, L2, L3;
     L1 = sizedim[0];
-    for(i=1; i < numBlocks; i++)
-        for(j=1; j < numBlocks; j++){
+
+    //std::vector<hpx::lcos::future<void> > futures; 
+
+    for(int i=1; i < numBlocks; i++)
+        for(int j=1; j < numBlocks; j++){
             L2 = sizedim[i];
             L3 = sizedim[j];
-#pragma omp task firstprivate(i,j,numBlocks,size,offset,L1,L2,L3)
+            /*futures.push_back(hpx::async( innerBlock, hpx::find_here(),
+                                          &A[(offset+start[i])*size + (offset+start[j])],
+                                          &A[ offset          *size + (offset+start[j])], 
+                                          &A[(offset+start[i])*size + offset], 
+                                          L1, L2, L3, size ) );*/
             ProcessInnerBlock( &A[(offset+start[i])*size + (offset+start[j])],
                                &A[ offset          *size + (offset+start[j])], 
                                &A[(offset+start[i])*size + offset], 
                                L1, L2, L3, size );
         }
-#pragma omp taskwait
+    //hpx::lcos::wait(futures);
 }
 
-/* *A is a pointer to the block processed 
- * The size of the diagonal block is L1xL1 
- * size is the size of the matrix in one dimension 
- */
 void ProcessDiagonalBlock(double * const A, const int L1, const int size)
 {
-    int i,j,k;
-    for(i=0;i<L1;i++)
-        for(j=i+1;j<L1;j++){
-            A[j*size+i]/=A[i*size+i];
-            // DAXPY(&A[j*size+(i+1)],&A[i*size+(i+1)] ,-A[j*size+i],L1-(i+1),1);
-            for(k=i+1;k<L1;k++)
+    for(int i = 0; i < L1; i++)
+        for(int j = i+1; j<L1; j++){
+            A[j*size+i] /= A[i*size+i];
+            for(int k = i+1; k < L1; k++)
                 A[j*size+k] = A[j*size+k] - A[j*size+i]*A[i*size+k];
         }
 }
 
-/* *A is a pointer to the column block processed 
- * *D is a pointer to the diagonal block required 
- * The size of the column block is L2xL1 
- * The size of the diagonal block is L1xL1 
- */
 void ProcessBlockOnColumn(double * const A, const double * const D, const int L1, const int L2, const int size)
 {
     int i,j,k;
     for(i=0;i<L1;i++)
         for(j=0;j<L2;j++){
             A[j*size+i]/=D[i*size+i];
-            //  DAXPY(&A[j*size+(i+1)],&D[i*size+(i+1)],-A[j*size+i],L1-(i+1),1);
             for(k=i+1;k<L1;k++)
                 A[j*size+k]+=-A[j*size+i]*D[i*size+k];
         }
 }
 
-/* *A is a pointer to the row block processed 
- * *D is a pointer to the diagonal block required 
- * The size of the row block is L1xL3 
- * The size of the diagonal block is L1xL1 
- */
 void ProcessBlockOnRow(double * const A, const double * const D, const int L1, const int L3, const int size)
 {
     int i,j,k;
     for(i=0;i<L1;i++)
         for(j=i+1;j<L1;j++)
-            // DAXPY(&A[size*j],&A[size*i],-D[j*size+i],L3,1);
             for(k=0;k<L3;k++)
                 A[j*size+k]+=-D[j*size+i]*A[i*size+k];
 }
 
-/* *A is a pointer to the inner block processed 
- * *remain is a pointer to the row block required 
- * *C is a pointer to the column block required 
- * The size of the row block is L1xL3 
- * The size of the column block is L2xL1 
- * The size of the inner block is L2xL3 
- */
 void ProcessInnerBlock( double * const A, const double * const remain, const double * const C, const int L1, const int L2, const int L3, const int size)
 {
     int i,j,k;
     for(i=0;i<L1;i++)
         for(j=0;j<L2;j++)
-            // DAXPY(&A[size*j],&remain[size*i],-C[j*size+i],L3,1);
             for(k=0;k<L3;k++)
                 A[j*size+k]+=-C[j*size+i]*remain[i*size+k];
 }
@@ -279,26 +280,22 @@ void InitMatrix3(double *A, const int size)
         printf( "Can't allocate memory\n" );
         exit(1);
     }
-#pragma omp parallel 
-    {
-#pragma omp for private(i,j)
-        for(i = 0; i < size; i++)
-            for(j = 0; j < size; j++){
-                if(i >= j)
-                    L[i*size + j] = i-j+1;
-                else
-                    L[i*size + j] = 0;
-                if(i <= j)
-                    U[i*size + j] = j-i+1;
-                else
-                    U[i*size + j] = 0;
-            }
-#pragma omp for private(i,j,k)
-        for(i = 0; i < size; i++)
-            for(j = 0; j < size; j++)
-                for(k = 0; k < size; k++)
-                    A[i*size + j] += L[i*size + k] * U[k*size + j];
-    }
+    //TODO: parallelize?
+    for(i = 0; i < size; i++)
+        for(j = 0; j < size; j++){
+            if(i >= j)
+                L[i*size + j] = i-j+1;
+            else
+                L[i*size + j] = 0;
+            if(i <= j)
+                U[i*size + j] = j-i+1;
+            else
+                U[i*size + j] = 0;
+        }
+    for(i = 0; i < size; i++)
+        for(j = 0; j < size; j++)
+            for(k = 0; k < size; k++)
+                A[i*size + j] += L[i*size + k] * U[k*size + j];
     free(L);
     free(U);
 }
