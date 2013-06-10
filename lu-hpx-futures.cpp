@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
-#include <hpx/hpx_main.hpp>
+//#include <hpx/hpx_main.hpp>
 //#include <hpx/include/lcos.hpp>
 //#include <hpx/include/actions.hpp>
 ////#include <hpx/include/components.hpp>
@@ -12,11 +12,18 @@
 ////#include <hpx/include/compression_snappy.hpp>
 
 #include <vector>
+
 using std::vector;
 //using hpx::lcos::future;
 //using hpx::lcos::wait;
 //using hpx::async;
 
+struct block {
+    vector<double> *data;
+    int rowLength;
+    int blockSize;
+    int start;
+};
 void LU(vector<double> &A, int size, int numBlocks);
 void checkResult(vector<double> &A, vector<double> &A2, int size);
 void stage1(vector<double> &A, int offset, vector<int> &sizedim, vector<int> &start, int size, int numBlocks);
@@ -30,8 +37,8 @@ void Print_Matrix(vector<double> &v, int numBlocks, int size);
 void InitMatrix2(vector<double> &A, int size);
 void InitMatrix3(vector<double> &A, int size);
 
-//HPX_PLAIN_ACTION(ProcessBlockOnColumn, ProcessBlockOnColumn_action);
-//HPX_PLAIN_ACTION(ProcessBlockOnRow, ProcessBlockOnRow_action);
+//HPX_PLAIN_ACTION(ProcessBlockOnColumn, column_action);
+//HPX_PLAIN_ACTION(ProcessBlockOnRow, row_action);
 //HPX_PLAIN_ACTION(ProcessInnerBlock, innerBlock_action);
 
 unsigned long GetTickCount()
@@ -49,9 +56,7 @@ int main (int argc, char *argv[])
         size = atoi(argv[1]);
     if( argc > 2 )
         numBlocks = atoi(argv[2]);
-
     printf("size = %d, numBlocks = %d\n", size, numBlocks);
-
     vector<double> A(size*size, 0);
     InitMatrix3( A, size );
     vector<double> A2(A);
@@ -63,15 +68,14 @@ int main (int argc, char *argv[])
 void LU(vector<double> &  A, int size, int numBlocks)
 {
     double t1, t2;
-    int i, j, k, remain;
-    int itr = 0, offset = 0, Block = 1;
+    int remain, offset = 0;
     vector<int> sizedim(numBlocks, 0);
     vector<int> start(numBlocks, 0);
 
     remain = size;
     t1 = GetTickCount();
     while(size-offset > numBlocks) {
-        for(i=0; i < numBlocks; i++) {
+        for(int i=0; i < numBlocks; i++) {
             if(i < remain % numBlocks) {
                 sizedim[i] = remain/numBlocks+1;
                 start[i]   = (remain/numBlocks+1)*i;
@@ -87,7 +91,6 @@ void LU(vector<double> &  A, int size, int numBlocks)
         offset += sizedim[0];
         remain -= sizedim[0];
     }
-    //ProcessDiagonalBlock( &A[offset*size+offset], size-offset, size );
     ProcessDiagonalBlock(A, size-offset, offset, size );
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000);
@@ -100,8 +103,18 @@ void stage1(vector<double> & A,
             int size, 
             int numBlocks)
 {
-    //ProcessDiagonalBlock(&A[offset*size+offset], sizedim[0], size);
     ProcessDiagonalBlock(A, sizedim[0], offset, size);
+}
+
+void ProcessDiagonalBlock(vector<double> &A, int L1, int offset, int size)
+{
+    int pivot = offset*size + offset;
+    for(int i = 0; i < L1; i++)
+        for(int j = i+1; j < L1; j++){
+            A[pivot+j*size+i] /= A[pivot+i*size+i];
+            for(int k = i+1; k < L1; k++)
+                A[pivot+j*size+k] -= A[pivot+j*size+i] * A[pivot+i*size+k];
+        }
 }
 
 void stage2(vector<double> & A, 
@@ -113,69 +126,31 @@ void stage2(vector<double> & A,
 {
     int L1, L2, L3;
     L1 = sizedim[0]; 
-    //ProcessBlockOnColumn_action blockCol;
-    //ProcessBlockOnRow_action blockRow;
-    //future<void>* futures = new future<void>[2*numBlocks];
+    //column_action blockCol;
+    //row_action blockRow;
+    //vector<future<void>> futures;
+    //futures.reserve(numBlocks*2);
     for(int i=1;i<numBlocks;i++){
         L2 = sizedim[i];
         L3 = sizedim[i];
-        //futures[2*i] = hpx::async(blockCol, hpx::find_here(),
-        //                              &A[(offset+start[i])*size + offset],
-        //                              &A[ offset          *size + offset],
-        //                              L1, L2, size ) ;
-        //ProcessBlockOnColumn( &A[(offset+start[i])*size + offset],
-        //                      &A[ offset          *size + offset],
-        //                      L1, L2, size );
+        //futures.push_back( async<blockCol>( hpx::find_here(), A, 
+        //                          (offset+start[i])*size + offset, 
+        //                          offset*size + offset,
+        //                          L1, L2, size ));
         ProcessBlockOnColumn( A, 
                               (offset+start[i])*size + offset, 
                               offset*size + offset,
                               L1, L2, size );
-        //futures[2*i+1] = hpx::async(blockRow, hpx::find_here(),
-        //                              &A[offset*size+(offset+start[i])],
-        //                              &A[offset*size+offset],
-        //                              L1, L3, size ) ;
-        //ProcessBlockOnRow( &A[offset*size+(offset+start[i])],
-        //                   &A[offset*size+offset],
-        //                   L1, L3, size );
+        //futures.push_back( async<blockRow>( hpx::find_here(), A, 
+        //                               offset*size+(offset+start[i]),
+        //                               offset*size+offset,
+        //                               L1, L3, size );
         ProcessBlockOnRow( A,
                            offset*size+(offset+start[i]),
                            offset*size+offset,
                            L1, L3, size );
     }
-    //vector<future<void>> f(&futures[0], &futures[0] + numBlocks);
-    //wait(f);
-}
-
-void stage3(vector<double> &A, 
-            int offset, 
-            vector<int> &sizedim,
-            vector<int> &start, 
-            int size, 
-            int numBlocks)
-{
-    int L1, L2, L3;
-    L1 = sizedim[0];
-
-    for(int i=1; i < numBlocks; i++)
-        for(int j=1; j < numBlocks; j++){
-            L2 = sizedim[i];
-            L3 = sizedim[j];
-            ProcessInnerBlock(A, (offset+start[i])*size + (offset+start[j]),
-                                  offset          *size + (offset+start[j]), 
-                                 (offset+start[i])*size + offset, 
-                               L1, L2, L3, size );
-        }
-}
-
-void ProcessDiagonalBlock(vector<double> &A, int L1, int offset, int size)
-{
-    int pivot = offset*size + offset;
-    for(int i = 0; i < L1; i++)
-        for(int j = i+1; j<L1; j++){
-            A[pivot+j*size+i] /= A[pivot+i*size+i];
-            for(int k = i+1; k < L1; k++)
-                A[pivot+j*size+k] = A[pivot+j*size+k] - A[pivot+j*size+i] * A[pivot+i*size+k];
-        }
+    //wait(futures);
 }
 
 void ProcessBlockOnColumn(vector<double> &A,
@@ -197,7 +172,28 @@ void ProcessBlockOnRow(vector<double> &A,
     for(int i=0;i<L1;i++)
         for(int j=i+1;j<L1;j++)
             for(int k=0;k<L3;k++)
-                A[p1 + j*size+k]+=-A[p2 + j*size+i]*A[p1+i*size+k];
+                A[p1 + j*size+k] += -A[p2 + j*size+i] * A[p1+i*size+k];
+}
+
+void stage3(vector<double> &A, 
+            int offset, 
+            vector<int> &sizedim,
+            vector<int> &start, 
+            int size, 
+            int numBlocks)
+{
+    int L1, L2, L3;
+    L1 = sizedim[0];
+
+    for(int i=1; i < numBlocks; i++)
+        for(int j=1; j < numBlocks; j++){
+            L2 = sizedim[i];
+            L3 = sizedim[j];
+            ProcessInnerBlock(A, (offset+start[i])*size + (offset+start[j]),
+                                  offset          *size + (offset+start[j]), 
+                                 (offset+start[i])*size + offset, 
+                               L1, L2, L3, size );
+        }
 }
 
 void ProcessInnerBlock(vector<double> &A, 
