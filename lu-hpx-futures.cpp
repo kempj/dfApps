@@ -35,6 +35,8 @@ void ProcessBlockOnColumn(vector<double> &A, int size, block B1, block B2);
 void ProcessBlockOnRow(vector<double> &A, int size, block B1, block B2);
 void ProcessInnerBlock(vector<double> &A, int size, block B1, block B2, block B3);
 
+void getBlockList(vector<vector<block>> &blocks, int size, int numBlocks);
+
 void Print_Matrix(vector<double> &v, int numBlocks, int size);
 void InitMatrix2(vector<double> &A, int size);
 void InitMatrix3(vector<double> &A, int size);
@@ -63,7 +65,7 @@ int main (int argc, char *argv[])
     vector<double> A2(A);
     LU( A, size, numBlocks);
    
-    Print_Matrix(A, size, size);
+    //Print_Matrix(A, size, size);
     checkResult( A, A2, size);
     return 0;
 }
@@ -71,57 +73,54 @@ int main (int argc, char *argv[])
 void LU(vector<double> &A, int size, int numBlocks)
 {
     double t1, t2;
-    int remain;
-    int offset = 0;
+    int blockSize , start;
     vector<vector<block>> blockList;
 
-    remain = size;
-    t1 = GetTickCount();
-    while(size-offset > numBlocks) {
+    for(int i=0; i < numBlocks; i++) 
         blockList.push_back(vector<block>());
-        for(int i=0; i < numBlocks; i++) {
-            if(i < remain % numBlocks) {
-                blockList.back().push_back( block( remain/numBlocks+1, 
-                                                   ((remain/numBlocks+1)*i) + offset * size + offset));
-                blockList.size()
-                //blocklist[i].size = remain/numBlocks+1;
-                //blocklist[i].start = ((remain/numBlocks+1)*i) + offset * size + offset;
-                //blocklist[i].start = (remain/numBlocks+1)*i;
-            } else {
-                blockList.back().push_back( block( remain/numBlocks, 
-                                                   ((remain/numBlocks+1)*(remain%numBlocks) +
-                                                   (remain/numBlocks)*(i-remain%numBlocks) ) + 
-                                                   offset * size + offset));
-                //blocklist[i].size = remain/numBlocks;
-                //blocklist[i].start = ((remain/numBlocks+1)*(remain%numBlocks) +
-                //                      (remain/numBlocks)*(i-remain%numBlocks) ) + offset * size + offset;
-            }
-        }
-        offset += blockList.back()[0].size;
-        remain -= blockList.back()[0].size;
-    }
+
+    t1 = GetTickCount();
     if(numBlocks > 1) {
+        getBlockList(blockList, size, numBlocks);
+
         for(int i = 0; i < blockList.size(); i++) {
             stage1( A, size, blockList.back() );
-            stage2( A, size, offset, blockList );
-            stage3( A, size, offset, blockList );
+            stage2( A, size, i, blockList );
+            stage3( A, size, i, blockList );
         }
+        ProcessDiagonalBlock(A, size, blockList.back().back());
     }
-    ProcessDiagonalBlock(A, size, blockList.back().back());
+    ProcessDiagonalBlock(A, size, block(size, 0));
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000);
 }
 
+void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
+{
+    int blockSize, start;
+
+    for(int i=0; i < numBlocks; i++) {
+        if(i < size % numBlocks) {
+            blockSize = size/numBlocks+1;
+            start = (size/numBlocks+1)*i; //blockList.back().push_back( block( remain/numBlocks+1, ((remain/numBlocks+1)*i) + offset * size + offset));
+        } else {
+            blockSize = size/numBlocks;
+            start = (size/numBlocks+1)*(size%numBlocks) + (size/numBlocks)*(i-size/numBlocks);
+        }
+        for(int j = 0; j < numBlocks; j++) {
+            blockList[j].push_back( block( blockSize, start));
+        }
+                //remain/numBlocks, ((remain/numBlocks+1)*(remain%numBlocks) + (remain/numBlocks)*(i-remain%numBlocks) ) + offset * size + offset));
+    }
+}
+
 void stage1(vector<double> &A, int size, vector<block> blocks)
 {
-    printf("Stage1\n");
     ProcessDiagonalBlock( A, size, blocks[0] );
 }
 
-//void ProcessDiagonalBlock(vector<double> &A, int L1, int offset, int size)
 void ProcessDiagonalBlock(vector<double> &A, int size, block B)
 {
-    printf("    void ProcessDiagonalBlock(vector<double> &A, int size, block B)\n");
     for(int i = 0; i < B.size; i++)
         for(int j = i+1; j < B.size; j++){
             A[B.start+j*size+i] /= A[B.start+i*size+i];
@@ -129,45 +128,28 @@ void ProcessDiagonalBlock(vector<double> &A, int size, block B)
                 A[B.start+j*size+k] -= A[B.start+j*size+i] * A[B.start+i*size+k];
         }
 }
-/*
-void stage2(vector<double> & A, 
-            int offset, 
-            vector<int> & sizedim, 
-            vector<int> & start, 
-            int size, 
-            int numBlocks)
-            */
+
 void stage2(vector<double> &A, int size, int offset, vector<vector<block>> blocks)
 {
-    printf("Stage2\n");
     //column_action blockCol;
     //row_action blockRow;
     //vector<future<void>> futures;
     //futures.reserve(numBlocks*2);
-    int numBlocks = blocks[offset].size() - offset;
-//    int numBlocks = blocks[0].size();
-    for(int i=1;i<numBlocks;i++){
+//    int numBlocks = blocks[offset].size() - offset;
+    int numBlocks = blocks[0].size();
+    for(int i=1; i<numBlocks; i++){
         //futures.push_back( async<blockCol>( hpx::find_here(), A, 
         //                          (offset+start[i])*size + offset, 
         //                          offset*size + offset,
         //                          L1, L2, size ));
-        ProcessBlockOnColumn( A, size, blocks[offset+i-1][offset], blocks[offset+i][offset]);
-                              //(offset+blocks[i].start)*size + offset, 
-                              //offset*size + offset,
-                              //L1, L2, size );
-        ProcessBlockOnRow( A, size, blocks[offset][offset+i-1], blocks[offset][offset+i]);
-                           //offset*size+(offset+start[i]),
-                           //offset*size+offset,
-                           //L1, L3, size );
+        ProcessBlockOnColumn( A, size, blocks[offset + i][offset], blocks[offset][offset]);
+        ProcessBlockOnRow(    A, size, blocks[offset][offset + i], blocks[offset][offset]);
     }
     //wait(futures);
 }
 
 void ProcessBlockOnColumn(vector<double> &A, int size, block B1, block B2)
-                          /*int p1, int p2,
-                          int L1, int L2, int size)*/
 {
-    printf("    void ProcessBlockOnColumn(vector<double> &A, int size, block B1, block B2)\n");
     for(int i=0; i < B1.size; i++)
         for(int j=0; j < B2.size; j++){
             A[B1.start+j*size+i] /= A[B2.start+i*size+i];
@@ -177,39 +159,26 @@ void ProcessBlockOnColumn(vector<double> &A, int size, block B1, block B2)
 }
 
 void ProcessBlockOnRow(vector<double> &A, int size, block B1, block B2)
-                       /*int p1, int p2, int L1, int L3, int size)*/
 {
-    printf("    void ProcessBlockOnRow(vector<double> &A, int size, block B1, block B2)\n");
     for(int i=0; i < B1.size; i++)
         for(int j=i+1; j < B1.size; j++)
             for(int k=0; k < B2.size; k++)
                 A[B1.start + j*size+k] += -A[B2.start + j*size+i] * A[B1.start+i*size+k];
 }
 
-// (vector<double> &A, int offset,  vector<int> &sizedim, vector<int> &start, int size, int numBlocks)
 void stage3(vector<double> &A, int size, int offset, vector<vector<block>> blocks)
 {
-//    int L1, L2, L3;
-//    L1 = sizedim[0];
-    printf("Stage3\n");
-    int numBlocks = blocks[offset].size() - offset;
-    for(int i=1; i < numBlocks; i++)
-        for(int j=1; j < numBlocks; j++){
-//            L2 = sizedim[i];
-//            L3 = sizedim[j];
+    int numBlocks = blocks[0].size();//offset].size() - offset;
+    for(int i=offset+1; i < numBlocks; i++)
+        for(int j=offset+1; j < numBlocks; j++){
             ProcessInnerBlock( A, size, 
-                               blocks[offset+i][offset+j], 
-                               blocks[offset  ][offset+j], 
-                               blocks[offset+i][offset  ]);
-                               /*(offset+start[i])*size + (offset+start[j]),
-                                  offset          *size + (offset+start[j]), 
-                                 (offset+start[i])*size + offset, 
-                                 L1, L2, L3, size );*/
+                               blocks[i][j], 
+                               blocks[offset][j], 
+                               blocks[i][offset]);
         }
 }
 
 void ProcessInnerBlock(vector<double> &A, int size, block B1, block B2, block B3)
-                       //int p1, int p2, int p3, int L1, int L2, int L3, int size)
 {
     for(int i=0; i < B1.size; i++)
         for(int j=0; j < B2.size; j++)
