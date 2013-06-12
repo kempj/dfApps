@@ -26,9 +26,9 @@ struct block {
 void LU(vector<double> &A, int size, int numBlocks);
 void checkResult(vector<double> &A, vector<double> &A2, int size);
 
-void stage1(vector<double> &A, int size, vector<block> blocks);
-void stage2(vector<double> &A, int size, int offset, vector<vector<block>> blocks);
-void stage3(vector<double> &A, int size, int offset, vector<vector<block>> blocks);
+void stage1(vector<double> &A, int size, int offset, vector<vector<block>> &blocks);
+void stage2(vector<double> &A, int size, int offset, vector<vector<block>> &blocks);
+void stage3(vector<double> &A, int size, int offset, vector<vector<block>> &blocks);
 
 void ProcessDiagonalBlock(vector<double> &A, int size, block B);
 void ProcessBlockOnColumn(vector<double> &A, int size, block B1, block B2);
@@ -76,21 +76,25 @@ void LU(vector<double> &A, int size, int numBlocks)
     int blockSize , start;
     vector<vector<block>> blockList;
 
-    for(int i=0; i < numBlocks; i++) 
-        blockList.push_back(vector<block>());
 
     t1 = GetTickCount();
     if(numBlocks > 1) {
         getBlockList(blockList, size, numBlocks);
 
         for(int i = 0; i < blockList.size(); i++) {
-            stage1( A, size, blockList.back() );
+            printf("main loop\n");
+            Print_Matrix(A, size, size);
+            stage1( A, size, i, blockList );
+            Print_Matrix(A, size, size);
             stage2( A, size, i, blockList );
+            Print_Matrix(A, size, size);
             stage3( A, size, i, blockList );
+            Print_Matrix(A, size, size);
         }
-        ProcessDiagonalBlock(A, size, blockList.back().back());
+        //ProcessDiagonalBlock(A, size, blockList.back().back());
+    } else {
+        ProcessDiagonalBlock(A, size, block(size, 0));
     }
-    ProcessDiagonalBlock(A, size, block(size, 0));
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000);
 }
@@ -98,6 +102,8 @@ void LU(vector<double> &A, int size, int numBlocks)
 void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
 {
     int blockSize, start;
+    for(int i=0; i < numBlocks; i++) 
+        blockList.push_back(vector<block>());
 
     for(int i=0; i < numBlocks; i++) {
         if(i < size % numBlocks) {
@@ -105,22 +111,42 @@ void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
             start = (size/numBlocks+1)*i; //blockList.back().push_back( block( remain/numBlocks+1, ((remain/numBlocks+1)*i) + offset * size + offset));
         } else {
             blockSize = size/numBlocks;
-            start = (size/numBlocks+1)*(size%numBlocks) + (size/numBlocks)*(i-size/numBlocks);
+            start = (size/numBlocks+1)*(size%numBlocks) + (size/numBlocks)*(i-size%numBlocks);
         }
-        for(int j = 0; j < numBlocks; j++) {
-            blockList[j].push_back( block( blockSize, start));
+        blockList[0].push_back( block( blockSize, start));
+        for(int j = 1; j < numBlocks; j++) {
+            blockList[j].push_back( block( blockSize, 
+                                           (blockList[j-1][i].start +
+                                            blockList[j-1][i].size * size)));
         }
                 //remain/numBlocks, ((remain/numBlocks+1)*(remain%numBlocks) + (remain/numBlocks)*(i-remain%numBlocks) ) + offset * size + offset));
     }
+    for(int i = 0; i < blockList.size(); i++) {
+        for(int j = 0; j < blockList[i].size(); j++) {
+            printf("%5d ", blockList[i][j].start);
+        }
+        printf("\n");
+    }
+        printf("\n");
+    for(int i = 0; i < blockList.size(); i++) {
+        for(int j = 0; j < blockList[i].size(); j++) {
+            printf("%5d ", blockList[i][j].size);
+        }
+        printf("\n");
+    }
+    printf("\n");
 }
 
-void stage1(vector<double> &A, int size, vector<block> blocks)
+void stage1(vector<double> &A, int size, int offset, vector<vector<block>> &blocks)
 {
-    ProcessDiagonalBlock( A, size, blocks[0] );
+    printf("Stage1 ");
+    ProcessDiagonalBlock( A, size, blocks[offset][offset] );
 }
 
 void ProcessDiagonalBlock(vector<double> &A, int size, block B)
 {
+    printf("diag\n");
+    printf("start = %d, size = %d\n", B.start, B.size);
     for(int i = 0; i < B.size; i++)
         for(int j = i+1; j < B.size; j++){
             A[B.start+j*size+i] /= A[B.start+i*size+i];
@@ -129,27 +155,32 @@ void ProcessDiagonalBlock(vector<double> &A, int size, block B)
         }
 }
 
-void stage2(vector<double> &A, int size, int offset, vector<vector<block>> blocks)
+void stage2(vector<double> &A, int size, int offset, vector<vector<block>> &blocks)
 {
+    printf("Stage2\n");
     //column_action blockCol;
     //row_action blockRow;
     //vector<future<void>> futures;
     //futures.reserve(numBlocks*2);
 //    int numBlocks = blocks[offset].size() - offset;
     int numBlocks = blocks[0].size();
-    for(int i=1; i<numBlocks; i++){
+    for(int i=offset + 1; i<numBlocks; i++){
+        printf("block %d,%d: ", offset, offset);
+        printf("block %d,%d, ", i, offset);
+        printf("block %d,%d\n", offset, i);
         //futures.push_back( async<blockCol>( hpx::find_here(), A, 
         //                          (offset+start[i])*size + offset, 
         //                          offset*size + offset,
         //                          L1, L2, size ));
-        ProcessBlockOnColumn( A, size, blocks[offset + i][offset], blocks[offset][offset]);
-        ProcessBlockOnRow(    A, size, blocks[offset][offset + i], blocks[offset][offset]);
+        ProcessBlockOnColumn( A, size, blocks[i][offset], blocks[offset][offset]);
+        ProcessBlockOnRow(    A, size, blocks[offset][i], blocks[offset][offset]);
     }
     //wait(futures);
 }
 
 void ProcessBlockOnColumn(vector<double> &A, int size, block B1, block B2)
 {
+    //printf("\tCol\n");
     for(int i=0; i < B1.size; i++)
         for(int j=0; j < B2.size; j++){
             A[B1.start+j*size+i] /= A[B2.start+i*size+i];
@@ -160,17 +191,22 @@ void ProcessBlockOnColumn(vector<double> &A, int size, block B1, block B2)
 
 void ProcessBlockOnRow(vector<double> &A, int size, block B1, block B2)
 {
+    //printf("\tRow\n");
     for(int i=0; i < B1.size; i++)
         for(int j=i+1; j < B1.size; j++)
             for(int k=0; k < B2.size; k++)
-                A[B1.start + j*size+k] += -A[B2.start + j*size+i] * A[B1.start+i*size+k];
+                A[B1.start+j*size+k] += -A[B2.start+j*size+i] * A[B1.start+i*size+k];
 }
 
-void stage3(vector<double> &A, int size, int offset, vector<vector<block>> blocks)
+void stage3(vector<double> &A, int size, int offset, vector<vector<block>> &blocks)
 {
+    printf("Stage3\n");
     int numBlocks = blocks[0].size();//offset].size() - offset;
     for(int i=offset+1; i < numBlocks; i++)
         for(int j=offset+1; j < numBlocks; j++){
+        printf("block %d,%d: ",i, j);
+        printf("block %d,%d, ", offset, j);
+        printf("block %d,%d\n",i, offset);
             ProcessInnerBlock( A, size, 
                                blocks[i][j], 
                                blocks[offset][j], 
@@ -208,13 +244,16 @@ void checkResult(vector<double> &A, vector<double> &A2, int size)
             if( (A2[i*size+j]-temp2) / A2[i*size+j] > 0.1 || (A2[i*size+j]-temp2) / A2[i*size+j] < -0.1 )
                 errors++;
         }
+    if(errors > 0)
+        Print_Matrix(A, size, size);
+
     printf("Errors = %d \n", errors);
 }
 
-void Print_Matrix(vector<double> &v, int numBlocks, int size)
+void Print_Matrix(vector<double> &v, int size1, int size)
 {
     printf( "\n" );
-    for(int i = 0; i < numBlocks; i++){
+    for(int i = 0; i < size1; i++){
         for(int j = 0; j < size; j++)
             printf( "%4.0f,", v[i*size + j] );
         printf( "\n" );
