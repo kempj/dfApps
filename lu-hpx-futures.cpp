@@ -79,20 +79,21 @@ int main (int argc, char *argv[])
     //vector<double> A(size*size, 0);
     A.reserve(size*size);
     InitMatrix3( size );
-    vector<double> A2;
-    A2.reserve(size*size);
-    for(int i = 0; i < size * size; i++)
-        A2[i] = A[i];
+//    vector<double> A2;
+//    A2.reserve(size*size);
+//    for(int i = 0; i < size * size; i++)
+//        A2[i] = A[i];
+    printf("starting LU\n");
     LU( size, numBlocks);
    
     //Print_Matrix(A2, size, size);
-    checkResult( A2, size);
+//    checkResult( A2, size);
     return 0;
 }
 
 void LU( int size, int numBlocks)
 {
-    double t1, t2;
+    unsigned long t1, t2;
     vector<vector<block>> blockList;
 
     t1 = GetTickCount();
@@ -108,7 +109,7 @@ void LU( int size, int numBlocks)
         ProcessDiagonalBlock(size, block(size, 0, size));
     }
     t2 = GetTickCount();
-    printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000);
+    printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000.0);
 }
 
 void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
@@ -157,20 +158,27 @@ void ProcessDiagonalBlock( int size, block B)
 
 void stage2( int size, int offset, vector<vector<block>> &blocks)
 {
-//    column_action blockCol;
-//    row_action blockRow;
-    typedef column_action blockCol;
-    typedef row_action blockRow;
+//    typedef column_action blockCol;
+//    typedef row_action blockRow;
+    int numBlocks = blocks[0].size();
+    unsigned long t1, t2;
+    column_action blockCol;
+    row_action blockRow;
     vector<future<void>> futures;
     futures.reserve(blocks.size()*2);
-    int numBlocks = blocks[0].size();
+
+    t1 = GetTickCount();
     for(int i=offset + 1; i<numBlocks; i++){
-        futures.push_back( async<blockCol>( hpx::find_here(), size, blocks[i][offset], blocks[offset][offset]));
+        futures.push_back( async(blockCol, hpx::find_here(), size, blocks[i][offset], blocks[offset][offset]));
+        //futures.push_back( async<blockCol>( hpx::find_here(), size, blocks[i][offset], blocks[offset][offset]));
         //ProcessBlockOnColumn( size, blocks[i][offset], blocks[offset][offset]);
         //ProcessBlockOnRow(    size, blocks[offset][i], blocks[offset][offset]);
-        futures.push_back( async<blockRow>( hpx::find_here(), size, blocks[offset][i], blocks[offset][offset]));
+        futures.push_back( async(blockRow, hpx::find_here(), size, blocks[offset][i], blocks[offset][offset]));
+        //futures.push_back( async<blockRow>( hpx::find_here(), size, blocks[offset][i], blocks[offset][offset]));
     }
     wait(futures);
+    t2 = GetTickCount();
+    printf("Offset %d, time stage2 iter = %f\n", offset, (t2-t1)/1000000.0);
 }
 
 void ProcessBlockOnColumn( int size, block B1, block B2)
