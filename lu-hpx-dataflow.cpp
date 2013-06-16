@@ -29,19 +29,19 @@ struct block {
     block(int size, int startAddress, int H) : size(size), start(startAddress), height(H){}
     block() : size(0), start(0), height(0){}
 };
-void LU( int size, int numBlocks);
-void checkResult( vector<double> &A2, int size);
+void LU(int numBlocks);
+void checkResult( vector<double> &A2);
 
-void ProcessDiagonalBlock( int size, block B);
-void ProcessBlockOnColumn( int size, block B1, block B2);
-void ProcessBlockOnRow( int size, block B1, block B2);
-void ProcessInnerBlock( int size, block B1, block B2, block B3);
+void ProcessDiagonalBlock( block B);
+void ProcessBlockOnColumn( block B1, block B2);
+void ProcessBlockOnRow( block B1, block B2);
+void ProcessInnerBlock( block B1, block B2, block B3);
 
-void getBlockList(vector<vector<block>> &blocks, int size, int numBlocks);
+void getBlockList(vector<vector<block>> &blocks, int numBlocks);
 
-void Print_Matrix(vector<double> &v, int numBlocks, int size);
-void InitMatrix3( int size);
-void initLoop(int i, int size);
+void Print_Matrix(vector<double> &v, int numBlocks);
+void InitMatrix3();
+void initLoop(int i);
 
 HPX_PLAIN_ACTION( ProcessBlockOnColumn, column_action);
 HPX_PLAIN_ACTION( ProcessBlockOnRow, row_action);
@@ -52,6 +52,7 @@ HPX_PLAIN_ACTION( ProcessDiagonalBlock, diag_action);
 vector<double> A;
 vector<double> L;
 vector<double> U;
+int size = 100;
 unsigned long GetTickCount()
 {
     struct timeval tv;
@@ -62,63 +63,77 @@ unsigned long GetTickCount()
 int main (int argc, char *argv[])
 {
     unsigned long t1, t2;
-    int size = 100, numBlocks = 1;
+    vector<double> A2;
+    int numBlocks = 1;
+
     if( argc > 1 )
         size = atoi(argv[1]);
     if( argc > 2 )
         numBlocks = atoi(argv[2]);
     printf("size = %d, numBlocks = %d\n", size, numBlocks);
+
     A.resize(size*size, 0);
     L.resize(size*size, 0);
     U.resize(size*size, 0);
     t1 = GetTickCount();
-    InitMatrix3( size );
+    InitMatrix3( 
     t2 = GetTickCount();
-    vector<double> A2;
     A2.reserve(size*size);
     for(int i = 0; i < size * size; i++)
         A2[i] = A[i];
     printf("init done, time = %f\n", (t2-t1)/1000000.0);
+
     t1 = GetTickCount();
     if(numBlocks > 1)
-        ProcessDiagonalBlock(size, block(size, 0, size));
+        ProcessDiagonalBlock(block(size, 0, size));
     else
         LU( size, numBlocks);
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000.0);
-    checkResult( A2, size);
+    
+    checkResult( A2);
     return 0;
 }
 
-void LU( int size, int numBlocks)
+void LU( int numBlocks)
 {
+    hpx::naming::id_type here = hpx::find_here();
     vector<vector<block>> blockList;
     column_action blockCol;
     row_action blockRow;
     innerBlock_action blockInner;
     diag_action blockDiag;
 
-        getBlockList(blockList, size, numBlocks);
+    getBlockList(blockList, numBlocks);
 
-        for(int i = 0; i < numBlocks; i++) {
-            ProcessDiagonalBlock( size, blockList[i][i] );
+    //TODO: return blocks from functions
+    dataflow_base<block> row_block;
+//    dataflow_base<block> diag_block = dataflow<blockDiag>( here, blockList[0][0] );
+    dataflow_base<block> next_diag;
+    vector<dataflow_base<block>> rowDF(numBlocks);
+    for(int i = 0; i < numBlocks; i++) {
+        rowDF[i] =  dataflow<blockDiag>( here, blockList[0][0] );
+//        dataflow_base<block> col_block = dataflow<blockCol>( here, blocks[i+1][i], diag_block );
+        dataflow_base<block> row_block = dataflow<blockRow>( here, blocks[i][i+1], diag_block );
 
-            for(int j=i + 1; i < numBlocks; j++){
-                dataflow<blockCol>( hpx::find_here(), size, blocks[j][i], blocks[i][i] );
-                dataflow<blockRow>( hpx::find_here(), size, blocks[i][j], blocks[i][i] );
+//        dataflow_base<block> inner_block = dataflow<blockInner>( here, 
+        for(int j=i + 1; i < numBlocks; j++){
+            for(int k = i + 1; k < numBlocks; k++) {
+                col_block[k] = dataflow<blockCol>( here, blocks[j][i+k], diag_block);
             }
+            row_block = dataflow<blockRow>( here, blocks[i][j], diag_block );
+        }
 
-            for(int j=i+1; i < numBlocks; j++) {
-                for(int k=i+1; k < numBlocks; k++) {
-                    dataflow<blockInner>( hpx::find_here(), size, blocks[j][k], blocks[i][k], blocks[j][i] );
-                }
+        for(int j=i+1; i < numBlocks; j++) {
+            for(int k=i+1; k < numBlocks; k++) {
+                inner_block = dataflow<blockInner>( here, blocks[j][k], blocks[i][k], blocks[j][i] );
             }
         }
-    } else {
+        diag_block = dataflow<blockDiag>( here, inner_block);
     }
 }
 
-void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
+void getBlockList(vector<vector<block>> &blockList, int numBlocks)
 {
     int blockSize, start, height;
     for(int i=0; i < numBlocks; i++) 
@@ -129,7 +144,7 @@ void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
         height += 1;
     for(int i=0; i < numBlocks; i++) {
         if(i < size % numBlocks) {
-            blockSize = size/numBlocks+1;
+             = 100blockSize = size/numBlocks+1;
             start = (size/numBlocks+1)*i;
         } else {
             blockSize = size/numBlocks;
@@ -147,7 +162,7 @@ void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
     }
 }
 
-void ProcessDiagonalBlock( int size, block B)
+void ProcessDiagonalBlock( block B)
 {
     for(int i = 0; i < B.size; i++) {
         for(int j = i+1; j < B.size; j++){
@@ -159,7 +174,7 @@ void ProcessDiagonalBlock( int size, block B)
     }
 }
 
-void ProcessBlockOnColumn( int size, block B1, block B2)
+void ProcessBlockOnColumn( block B1, block B2)
 {
     for(int i=0; i < B2.size; i++) {
         for(int j=0; j < B1.height; j++) {
@@ -171,7 +186,7 @@ void ProcessBlockOnColumn( int size, block B1, block B2)
     }
 }
 
-void ProcessBlockOnRow( int size, block B1, block B2)
+void ProcessBlockOnRow( block B1, block B2)
 {
     for(int i=0; i < B2.size; i++)
         for(int j=i+1; j < B2.size; j++)
@@ -179,7 +194,7 @@ void ProcessBlockOnRow( int size, block B1, block B2)
                 A[B1.start+j*size+k] += -A[B2.start+j*size+i] * A[B1.start+i*size+k];
 }
 
-void ProcessInnerBlock( int size, block B1, block B2, block B3)
+void ProcessInnerBlock( block B1, block B2, block B3)
 {
     for(int i=0; i < B3.size; i++){
         for(int j=0; j < B1.height; j++){
@@ -187,7 +202,7 @@ void ProcessInnerBlock( int size, block B1, block B2, block B3)
                 A[B1.start+j*size+k] += -A[B3.start+j*size+i] * A[B2.start+i*size+k];
 }
 
-void checkResult( vector<double> &A2, int size) 
+void checkResult( vector<double> &A2, ) 
 {
     int errors = 0;
     double temp2;
@@ -215,15 +230,15 @@ void checkResult( vector<double> &A2, int size)
         }
     if(errors > 0){
         printf("A:\n");
-        Print_Matrix(A, size, size);
+        Print_Matrix(A);
         printf("A2:\n");
-        Print_Matrix(A2, size, size);
+        Print_Matrix(A2);
     }
 
     printf("Errors = %d \n", errors);
 }
 
-void Print_Matrix(vector<double> &v, int size1, int size)
+void Print_Matrix(vector<double> &v)
 {
     printf( "\n" );
     for(int i = 0; i < size1; i++){
@@ -234,7 +249,7 @@ void Print_Matrix(vector<double> &v, int size1, int size)
     printf( "\n" );
 }
 
-void InitMatrix3( int size)
+void InitMatrix3()
 {
     vector<future<void>> futures;
     futures.reserve(size);
@@ -261,7 +276,7 @@ void InitMatrix3( int size)
     wait(futures);
 
 }
-void initLoop(int i, int size) {
+void initLoop(int i) {
     for(int j = 0; j < size; j++)
         for(int k = 0; k < size; k++)
             A[i*size + j] += L[i*size + k] * U[k*size + j];
