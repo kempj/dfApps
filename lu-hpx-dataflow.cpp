@@ -7,7 +7,10 @@
 #include <hpx/hpx_main.hpp>
 #include <hpx/include/lcos.hpp>
 #include <hpx/include/actions.hpp>
+
 #include <hpx/components/dataflow/dataflow.hpp>
+//#include <hpx/runtime/actions/plain_action.hpp>
+//#include <hpx/include/util.hpp>
 
 #include <vector>
 
@@ -42,18 +45,18 @@ block ProcessInnerBlock( block B1, block B2, block B3);
 
 void getBlockList(vector<vector<block>> &blocks, int numBlocks);
 
-void Print_Matrix(vector<double> &v, int numBlocks);
+void Print_Matrix(vector<double> &v);
 void InitMatrix3();
 void initLoop(int i);
 
 block wrapBlock(block Block);
 
-HPX_PLAIN_ACTION( wrapBlock, block_action);
-HPX_PLAIN_ACTION( ProcessBlockOnColumn, column_action);
-HPX_PLAIN_ACTION( ProcessBlockOnRow, row_action);
-HPX_PLAIN_ACTION( ProcessInnerBlock, innerBlock_action);
-HPX_PLAIN_ACTION( initLoop, init_action);
-HPX_PLAIN_ACTION( ProcessDiagonalBlock, diag_action);
+HPX_PLAIN_ACTION( wrapBlock, wrap_action );
+HPX_PLAIN_ACTION( ProcessBlockOnColumn, column_action );
+HPX_PLAIN_ACTION( ProcessBlockOnRow, row_action );
+HPX_PLAIN_ACTION( ProcessInnerBlock, innerBlock_action );
+HPX_PLAIN_ACTION( initLoop, init_action );
+HPX_PLAIN_ACTION( ProcessDiagonalBlock, diag_action );
 
 vector<double> A;
 vector<double> L;
@@ -108,40 +111,44 @@ void LU( int numBlocks)
 {
     hpx::naming::id_type here = hpx::find_here();
     vector<vector<block>> blockList;
-    typedef column_action blockCol;
-    typedef row_action blockRow;
-    typedef innerBlock_action blockInner;
-    typedef diag_action blockDiag;
-    typedef block_action wrap;
+//    typedef column_action blockCol;
+//    typedef row_action blockRow;
+//    typedef innerBlock_action blockInner;
+//    typedef diag_action blockDiag;
+//    typedef wrap_action wrap;
 
     getBlockList(blockList, numBlocks);
 
-    dataflow<blockRow> *topRow = new dataflow<blockRow>[numBlocks];
-    dataflow<blockInner> **dfArray = new dataflow<blockInner>* [numBlocks];
-    dataflow<blockDiag> diag_block = dataflow<blockDiag>( here, dataflow<wrap>( here, blockList[0][0]) );
-    dataflow<blockCol> first_col;
+    dataflow_base<block> *topRow = new dataflow_base<block>[numBlocks];
+    dataflow_base<block> **dfArray = new dataflow_base<block>* [numBlocks];
+    dataflow_base<block> diag_block = dataflow<diag_action>( here, dataflow<wrap_action>( here, blockList[0][0]) );
+    dataflow_base<block> first_col;
 
     for(int i = 1; i < numBlocks; i++){
-        topRow[i] = dataflow<blockRow>( here, dataflow<wrap>(here, blockList[0][i]), diag_block);
-        dfArray[i] = new dataflow_base<blockRow>[numBlocks];
+        dataflow_base<block> tmpBlock = dataflow<wrap_action>(here, blockList[0][i]);
+        topRow[i] = dataflow<row_action>( here, tmpBlock, diag_block);
+        dfArray[i] = new dataflow_base<block>[numBlocks];
         for(int j = 1; j < numBlocks; j++) {
-            dfArray[i][j] = dataflow<wrap>(here, blockList[i][j]);
+            dfArray[i][j] = dataflow<wrap_action>(here, blockList[i][j]);
+        }
     }
     for(int i = 0; i < numBlocks; i++) {
-        //Inner blocks
         for(int j = i + 1; j < numBlocks; j++){
-            first_col = dataflow<blockCol>( here, dfArray[j][i], diag_block);
+            first_col = dataflow<column_action>( here, dfArray[j][i], diag_block);
             for(int k = i + 1; k < numBlocks; k++) {
-                dfArray[j][k] = dataflow<blockInner>( here, dfArray[j][k], topRow[k], first_col );
+                dfArray[j][k] = dataflow<innerBlock_action>( here, dfArray[j][k], topRow[k], first_col );
             }
         }
-        diag_block = dataflow<blockDiag>( here, dfArray[i+1][i+1]);
+        diag_block = dataflow<diag_action>( here, dfArray[i+1][i+1]);
         for(int j=i + 2; j < numBlocks; j++){
-            topRow[j] = dataflow<blockRow>( here, dfArray[i+1][j], diag_block);
+            topRow[j] = dataflow<row_action>( here, dfArray[i+1][j], diag_block);
         }
     }
+    for(int i = 1; i < numBlocks; i++){
+        delete [] dfArray[i];
+    }
+    delete [] dfArray;
     delete [] topRow;
-    delete [] nextRow;
 }
 
 void getBlockList(vector<vector<block>> &blockList, int numBlocks)
@@ -155,7 +162,7 @@ void getBlockList(vector<vector<block>> &blockList, int numBlocks)
         height += 1;
     for(int i=0; i < numBlocks; i++) {
         if(i < size % numBlocks) {
-             = 100blockSize = size/numBlocks+1;
+            blockSize = size/numBlocks+1;
             start = (size/numBlocks+1)*i;
         } else {
             blockSize = size/numBlocks;
@@ -183,7 +190,7 @@ block ProcessDiagonalBlock( block B)
             }
         }
     }
-    return block B;
+    return  B;
 }
 
 block ProcessBlockOnColumn( block B1, block B2)
@@ -196,7 +203,7 @@ block ProcessBlockOnColumn( block B1, block B2)
             }
         }
     }
-    return block B1;
+    return B1;
 }
 
 block ProcessBlockOnRow( block B1, block B2)
@@ -205,19 +212,19 @@ block ProcessBlockOnRow( block B1, block B2)
         for(int j=i+1; j < B2.size; j++)
             for(int k=0; k < B1.size; k++)
                 A[B1.start+j*size+k] += -A[B2.start+j*size+i] * A[B1.start+i*size+k];
-    return block B1;
+    return B1;
 }
 
 block ProcessInnerBlock( block B1, block B2, block B3)
 {
-    for(int i=0; i < B3.size; i++){
-        for(int j=0; j < B1.height; j++){
-            for(int k=0; k < B2.size; k++){
+    for(int i=0; i < B3.size; i++)
+        for(int j=0; j < B1.height; j++)
+            for(int k=0; k < B2.size; k++)
                 A[B1.start+j*size+k] += -A[B3.start+j*size+i] * A[B2.start+i*size+k];
-    return block B1;
+    return B1;
 }
 
-void checkResult( vector<double> &A2, ) 
+void checkResult( vector<double> &A2 ) 
 {
     int errors = 0;
     double temp2;
@@ -256,7 +263,7 @@ void checkResult( vector<double> &A2, )
 void Print_Matrix(vector<double> &v)
 {
     printf( "\n" );
-    for(int i = 0; i < size1; i++){
+    for(int i = 0; i < size; i++){
         for(int j = 0; j < size; j++)
             printf( "%5.2f, ", v[i*size + j] );
         printf( "\n" );
