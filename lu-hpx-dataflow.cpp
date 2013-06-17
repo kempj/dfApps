@@ -7,6 +7,7 @@
 #include <hpx/hpx_main.hpp>
 #include <hpx/include/lcos.hpp>
 #include <hpx/include/actions.hpp>
+#include <hpx/components/dataflow/dataflow.hpp>
 
 #include <vector>
 
@@ -14,6 +15,8 @@ using std::vector;
 using hpx::lcos::future;
 using hpx::lcos::wait;
 using hpx::async;
+using hpx::lcos::dataflow;
+using hpx::lcos::dataflow_base;
 
 struct block {
     template<class Archive>
@@ -32,10 +35,10 @@ struct block {
 void LU(int numBlocks);
 void checkResult( vector<double> &A2);
 
-void ProcessDiagonalBlock( block B);
-void ProcessBlockOnColumn( block B1, block B2);
-void ProcessBlockOnRow( block B1, block B2);
-void ProcessInnerBlock( block B1, block B2, block B3);
+block ProcessDiagonalBlock( block B);
+block ProcessBlockOnColumn( block B1, block B2);
+block ProcessBlockOnRow( block B1, block B2);
+block ProcessInnerBlock( block B1, block B2, block B3);
 
 void getBlockList(vector<vector<block>> &blocks, int numBlocks);
 
@@ -43,6 +46,9 @@ void Print_Matrix(vector<double> &v, int numBlocks);
 void InitMatrix3();
 void initLoop(int i);
 
+block wrapBlock(block Block);
+
+HPX_PLAIN_ACTION( wrapBlock, block_action);
 HPX_PLAIN_ACTION( ProcessBlockOnColumn, column_action);
 HPX_PLAIN_ACTION( ProcessBlockOnRow, row_action);
 HPX_PLAIN_ACTION( ProcessInnerBlock, innerBlock_action);
@@ -76,7 +82,7 @@ int main (int argc, char *argv[])
     L.resize(size*size, 0);
     U.resize(size*size, 0);
     t1 = GetTickCount();
-    InitMatrix3( 
+    InitMatrix3();
     t2 = GetTickCount();
     A2.reserve(size*size);
     for(int i = 0; i < size * size; i++)
@@ -87,50 +93,55 @@ int main (int argc, char *argv[])
     if(numBlocks > 1)
         ProcessDiagonalBlock(block(size, 0, size));
     else
-        LU( size, numBlocks);
+        LU(numBlocks);
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000.0);
     
-    checkResult( A2);
+    checkResult( A2 );
     return 0;
 }
 
+block wrapBlock(block Block){
+    return Block;
+}
 void LU( int numBlocks)
 {
     hpx::naming::id_type here = hpx::find_here();
     vector<vector<block>> blockList;
-    column_action blockCol;
-    row_action blockRow;
-    innerBlock_action blockInner;
-    diag_action blockDiag;
+    typedef column_action blockCol;
+    typedef row_action blockRow;
+    typedef innerBlock_action blockInner;
+    typedef diag_action blockDiag;
+    typedef block_action wrap;
 
     getBlockList(blockList, numBlocks);
 
-    //TODO: return blocks from functions
-    dataflow_base<block> row_block;
-//    dataflow_base<block> diag_block = dataflow<blockDiag>( here, blockList[0][0] );
-    dataflow_base<block> next_diag;
-    vector<dataflow_base<block>> rowDF(numBlocks);
-    for(int i = 0; i < numBlocks; i++) {
-        rowDF[i] =  dataflow<blockDiag>( here, blockList[0][0] );
-//        dataflow_base<block> col_block = dataflow<blockCol>( here, blocks[i+1][i], diag_block );
-        dataflow_base<block> row_block = dataflow<blockRow>( here, blocks[i][i+1], diag_block );
+    dataflow<blockRow> *topRow = new dataflow<blockRow>[numBlocks];
+    dataflow<blockInner> **dfArray = new dataflow<blockInner>* [numBlocks];
+    dataflow<blockDiag> diag_block = dataflow<blockDiag>( here, dataflow<wrap>( here, blockList[0][0]) );
+    dataflow<blockCol> first_col;
 
-//        dataflow_base<block> inner_block = dataflow<blockInner>( here, 
-        for(int j=i + 1; i < numBlocks; j++){
-            for(int k = i + 1; k < numBlocks; k++) {
-                col_block[k] = dataflow<blockCol>( here, blocks[j][i+k], diag_block);
-            }
-            row_block = dataflow<blockRow>( here, blocks[i][j], diag_block );
-        }
-
-        for(int j=i+1; i < numBlocks; j++) {
-            for(int k=i+1; k < numBlocks; k++) {
-                inner_block = dataflow<blockInner>( here, blocks[j][k], blocks[i][k], blocks[j][i] );
-            }
-        }
-        diag_block = dataflow<blockDiag>( here, inner_block);
+    for(int i = 1; i < numBlocks; i++){
+        topRow[i] = dataflow<blockRow>( here, dataflow<wrap>(here, blockList[0][i]), diag_block);
+        dfArray[i] = new dataflow_base<blockRow>[numBlocks];
+        for(int j = 1; j < numBlocks; j++) {
+            dfArray[i][j] = dataflow<wrap>(here, blockList[i][j]);
     }
+    for(int i = 0; i < numBlocks; i++) {
+        //Inner blocks
+        for(int j = i + 1; j < numBlocks; j++){
+            first_col = dataflow<blockCol>( here, dfArray[j][i], diag_block);
+            for(int k = i + 1; k < numBlocks; k++) {
+                dfArray[j][k] = dataflow<blockInner>( here, dfArray[j][k], topRow[k], first_col );
+            }
+        }
+        diag_block = dataflow<blockDiag>( here, dfArray[i+1][i+1]);
+        for(int j=i + 2; j < numBlocks; j++){
+            topRow[j] = dataflow<blockRow>( here, dfArray[i+1][j], diag_block);
+        }
+    }
+    delete [] topRow;
+    delete [] nextRow;
 }
 
 void getBlockList(vector<vector<block>> &blockList, int numBlocks)
@@ -162,7 +173,7 @@ void getBlockList(vector<vector<block>> &blockList, int numBlocks)
     }
 }
 
-void ProcessDiagonalBlock( block B)
+block ProcessDiagonalBlock( block B)
 {
     for(int i = 0; i < B.size; i++) {
         for(int j = i+1; j < B.size; j++){
@@ -172,9 +183,10 @@ void ProcessDiagonalBlock( block B)
             }
         }
     }
+    return block B;
 }
 
-void ProcessBlockOnColumn( block B1, block B2)
+block ProcessBlockOnColumn( block B1, block B2)
 {
     for(int i=0; i < B2.size; i++) {
         for(int j=0; j < B1.height; j++) {
@@ -184,22 +196,25 @@ void ProcessBlockOnColumn( block B1, block B2)
             }
         }
     }
+    return block B1;
 }
 
-void ProcessBlockOnRow( block B1, block B2)
+block ProcessBlockOnRow( block B1, block B2)
 {
     for(int i=0; i < B2.size; i++)
         for(int j=i+1; j < B2.size; j++)
             for(int k=0; k < B1.size; k++)
                 A[B1.start+j*size+k] += -A[B2.start+j*size+i] * A[B1.start+i*size+k];
+    return block B1;
 }
 
-void ProcessInnerBlock( block B1, block B2, block B3)
+block ProcessInnerBlock( block B1, block B2, block B3)
 {
     for(int i=0; i < B3.size; i++){
         for(int j=0; j < B1.height; j++){
             for(int k=0; k < B2.size; k++){
                 A[B1.start+j*size+k] += -A[B3.start+j*size+i] * A[B2.start+i*size+k];
+    return block B1;
 }
 
 void checkResult( vector<double> &A2, ) 
