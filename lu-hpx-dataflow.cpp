@@ -10,10 +10,6 @@
 
 #include <hpx/lcos/local/dataflow.hpp>
 #include <hpx/util/unwrapped.hpp>
-//#include <hpx/components/dataflow/dataflow.hpp>
-//#include <hpx/runtime/actions/plain_action.hpp>
-//#include <hpx/include/util.hpp>
-
 #include <vector>
 
 using std::vector;
@@ -118,39 +114,43 @@ void LU( int numBlocks)
 
     getBlockList(blockList, numBlocks);
 
-    future<block> *topRow = new future<block>[numBlocks];
-    future<block> **dfArray = new future<block>* [numBlocks];
-    future<block> diag_block = async( wrapBlock,  blockList[0][0] );
-    future<block> first_col;
+    vector<future<block>> topRow(numBlocks);
+    vector<vector<future<block>>> dfArray(numBlocks);
+//    future<block> **dfArray = new future<block>* [numBlocks];
+    future<block> diag_block = async( ProcessDiagonalBlock,  blockList[0][0] );
+    future<block> first_col = async( ProcessBlockOnColumn, blockList[1][0], blockList[0][0] );
+    topRow[0] = diag_block;
 
     for(int i = 1; i < numBlocks; i++){
         future<block> tmpBlock = async( wrapBlock , blockList[0][i]);
         topRow[i] = dataflow( unwrapped(&ProcessBlockOnRow), tmpBlock, diag_block);
-        dfArray[i] = new future<block>[numBlocks];
-        for(int j = 1; j < numBlocks; j++) {
-            dfArray[i][j] = async( wrapBlock, blockList[i][j]);
+        dfArray[i].reserve(numBlocks);
+        for(int j = 0; j < numBlocks; j++) {
+            dfArray[i].push_back( async( wrapBlock, blockList[i][j]));
         }
     }
-    for(int i = 1; i < numBlocks; i++) {
+    for(int i = 1; i < numBlocks-1; i++) {
+        printf("top of the loop\n");
         for(int j = i + 1; j < numBlocks; j++){
-            first_col = dataflow( unwrapped( &ProcessBlockOnColumn ), dfArray[i][j], diag_block);
+            first_col = dataflow( unwrapped( &ProcessBlockOnColumn ), dfArray[j][i], diag_block);
             for(int k = i + 1; k < numBlocks; k++) {
                 dfArray[j][k] = dataflow( unwrapped( &ProcessInnerBlock ), dfArray[j][k], topRow[k], first_col );
             }
         }
-        if( i < numBlocks - 1) {
-            diag_block = dataflow( unwrapped( &ProcessDiagonalBlock ), dfArray[i+1][i+1]);
-            for(int j=i + 2; j < numBlocks; j++){
-                topRow[j] = dataflow( unwrapped( &ProcessBlockOnRow ), dfArray[i+1][j], diag_block);
-            }
+        diag_block = dataflow( unwrapped( &ProcessDiagonalBlock ), dfArray[i+1][i+1]);
+        for(int j=i + 2; j < numBlocks; j++){
+            topRow[j] = dataflow( unwrapped( &ProcessBlockOnRow ), dfArray[i+1][j], diag_block);
         }
     }
     wait(diag_block);
-    for(int i = 1; i < numBlocks; i++){
-        delete [] dfArray[i];
-    }
-    delete [] dfArray;
-    delete [] topRow;
+    wait(topRow);
+    wait(dfArray[dfArray.size()-1]);
+//    wait(dfArray[dfArray.size()-2]);
+//    for(int i = 1; i < numBlocks; i++){
+//        delete [] dfArray[i];
+//    }
+//    delete [] dfArray;
+//    delete [] topRow;
 }
 
 void getBlockList(vector<vector<block>> &blockList, int numBlocks)
@@ -184,6 +184,7 @@ void getBlockList(vector<vector<block>> &blockList, int numBlocks)
 
 block ProcessDiagonalBlock( block B)
 {
+    printf("diag\n");
     for(int i = 0; i < B.size; i++) {
         for(int j = i+1; j < B.size; j++){
             A[B.start+j*size+i] /= A[B.start+i*size+i];
@@ -197,6 +198,7 @@ block ProcessDiagonalBlock( block B)
 
 block ProcessBlockOnColumn( block B1, block B2)
 {
+    printf("Col\n");
     for(int i=0; i < B2.size; i++) {
         for(int j=0; j < B1.height; j++) {
             A[B1.start+j*size+i] /= A[B2.start+i*size+i];
@@ -210,6 +212,7 @@ block ProcessBlockOnColumn( block B1, block B2)
 
 block ProcessBlockOnRow( block B1, block B2)
 {
+    printf("Row\n");
     for(int i=0; i < B2.size; i++)
         for(int j=i+1; j < B2.size; j++)
             for(int k=0; k < B1.size; k++)
@@ -219,6 +222,7 @@ block ProcessBlockOnRow( block B1, block B2)
 
 block ProcessInnerBlock( block B1, block B2, block B3)
 {
+    printf("Inner\n");
     for(int i=0; i < B3.size; i++)
         for(int j=0; j < B1.height; j++)
             for(int k=0; k < B2.size; k++)
@@ -247,8 +251,8 @@ void checkResult( vector<double> &originalA )
             for(int k=0;k<size;k++)
                 temp2+=L[i*size+k]*U[k*size+j];
             if( (originalA[i*size+j]-temp2) / originalA[i*size+j] > 0.1 || (originalA[i*size+j]-temp2) / originalA[i*size+j] < -0.1 ){
-                printf("error:[%d][%d]\n", i, j);
-                printf("\t %f =/= %f \n", originalA[i*size+j], temp2);
+                printf("error:[%d][%d] ", i, j);
+//                printf("\t %f =/= %f \n", originalA[i*size+j], temp2);
                 errors++;
             }
         }
@@ -277,7 +281,6 @@ void InitMatrix3()
 {
     vector<future<void>> futures;
     futures.reserve(size);
-//    init_action innerLoop;
     for(int i = 0; i < size; i++)
         for(int j = 0; j < size; j++){
             if(i >= j)
@@ -293,8 +296,8 @@ void InitMatrix3()
         futures.push_back( async( initLoop, i));
     }
     wait(futures);
-
 }
+
 void initLoop(int i) {
     for(int j = 0; j < size; j++)
         for(int k = 0; k < size; k++)
