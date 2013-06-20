@@ -182,7 +182,6 @@ void getBlockList(vector<vector<block>> &blockList, int numBlocks)
 
 block ProcessDiagonalBlock( block B)
 {
-    printf("diag: %d\n", B.start);
     for(int i = 0; i < B.size; i++) {
         for(int j = i+1; j < B.size; j++){
             A[B.start+j*size+i] /= A[B.start+i*size+i];
