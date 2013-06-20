@@ -111,46 +111,44 @@ void LU( int numBlocks)
 {
     hpx::naming::id_type here = hpx::find_here();
     vector<vector<block>> blockList;
-
     getBlockList(blockList, numBlocks);
+    vector<vector<vector<future<block>>>> dfArray(numBlocks);
+    future<block> *diag_block, *first_col;
 
-    vector<future<block>> topRow(numBlocks);
-    vector<vector<future<block>>> dfArray(numBlocks);
-//    future<block> **dfArray = new future<block>* [numBlocks];
-    future<block> diag_block = async( ProcessDiagonalBlock,  blockList[0][0] );
-    future<block> first_col = async( ProcessBlockOnColumn, blockList[1][0], blockList[0][0] );
-    topRow[0] = diag_block;
-
-    for(int i = 1; i < numBlocks; i++){
-        future<block> tmpBlock = async( wrapBlock , blockList[0][i]);
-        topRow[i] = dataflow( unwrapped(&ProcessBlockOnRow), tmpBlock, diag_block);
-        dfArray[i].reserve(numBlocks);
-        for(int j = 0; j < numBlocks; j++) {
-            dfArray[i].push_back( async( wrapBlock, blockList[i][j]));
+    for(int i = 0; i < numBlocks; i++){
+        dfArray[i].resize(numBlocks);
+        for(int j = 0; j < numBlocks; j++){
+            dfArray[i][j].resize(numBlocks);
         }
     }
-    for(int i = 1; i < numBlocks-1; i++) {
-        printf("top of the loop\n");
+    dfArray[0][0][0] = async( ProcessDiagonalBlock, blockList[0][0] );
+    diag_block = &dfArray[0][0][0];
+    for(int i = 1; i < numBlocks; i++) {
+        dfArray[0][0][i] = dataflow( unwrapped( &ProcessBlockOnRow ), async( wrapBlock, blockList[0][i] ), *diag_block);
+    }
+    for(int i = 1; i < numBlocks; i++) {
+        dfArray[0][i][0] = dataflow( unwrapped( &ProcessBlockOnColumn ), async( wrapBlock, blockList[i][0] ), *diag_block);
+        first_col = &dfArray[0][i][0];
+        for(int j = 1; j < numBlocks; j++) {
+            dfArray[0][i][j] = dataflow( unwrapped( &ProcessInnerBlock ), async( wrapBlock, blockList[i][j]), dfArray[0][0][j], *first_col );
+        }
+    }
+    for(int i = 1; i < numBlocks; i++) {
+        dfArray[i][i][i] = dataflow( unwrapped( &ProcessDiagonalBlock ), dfArray[i-1][i][i]);
+        diag_block = &dfArray[i][i][i];
         for(int j = i + 1; j < numBlocks; j++){
-            first_col = dataflow( unwrapped( &ProcessBlockOnColumn ), dfArray[j][i], diag_block);
+            dfArray[i][i][j] = dataflow( unwrapped(&ProcessBlockOnRow), dfArray[i-1][i][j], *diag_block);
+        }
+        for(int j = i + 1; j < numBlocks; j++){
+            dfArray[i][j][i] = dataflow( unwrapped( &ProcessBlockOnColumn ), dfArray[i-1][j][i], *diag_block);
+            first_col = &dfArray[i][j][i];
             for(int k = i + 1; k < numBlocks; k++) {
-                dfArray[j][k] = dataflow( unwrapped( &ProcessInnerBlock ), dfArray[j][k], topRow[k], first_col );
+                dfArray[i][j][k] = dataflow( unwrapped( &ProcessInnerBlock ), dfArray[i-1][j][k], dfArray[i][i][k], *first_col );
             }
         }
-        diag_block = dataflow( unwrapped( &ProcessDiagonalBlock ), dfArray[i+1][i+1]);
-        for(int j=i + 2; j < numBlocks; j++){
-            topRow[j] = dataflow( unwrapped( &ProcessBlockOnRow ), dfArray[i+1][j], diag_block);
-        }
     }
-    wait(diag_block);
-    wait(topRow);
-    wait(dfArray[dfArray.size()-1]);
-//    wait(dfArray[dfArray.size()-2]);
-//    for(int i = 1; i < numBlocks; i++){
-//        delete [] dfArray[i];
-//    }
-//    delete [] dfArray;
-//    delete [] topRow;
+    printf("done allocating futures\n");
+    wait(*diag_block);
 }
 
 void getBlockList(vector<vector<block>> &blockList, int numBlocks)
@@ -184,7 +182,7 @@ void getBlockList(vector<vector<block>> &blockList, int numBlocks)
 
 block ProcessDiagonalBlock( block B)
 {
-    printf("diag\n");
+    printf("diag: %d\n", B.start);
     for(int i = 0; i < B.size; i++) {
         for(int j = i+1; j < B.size; j++){
             A[B.start+j*size+i] /= A[B.start+i*size+i];
@@ -198,7 +196,6 @@ block ProcessDiagonalBlock( block B)
 
 block ProcessBlockOnColumn( block B1, block B2)
 {
-    printf("Col\n");
     for(int i=0; i < B2.size; i++) {
         for(int j=0; j < B1.height; j++) {
             A[B1.start+j*size+i] /= A[B2.start+i*size+i];
@@ -212,7 +209,6 @@ block ProcessBlockOnColumn( block B1, block B2)
 
 block ProcessBlockOnRow( block B1, block B2)
 {
-    printf("Row\n");
     for(int i=0; i < B2.size; i++)
         for(int j=i+1; j < B2.size; j++)
             for(int k=0; k < B1.size; k++)
@@ -222,7 +218,6 @@ block ProcessBlockOnRow( block B1, block B2)
 
 block ProcessInnerBlock( block B1, block B2, block B3)
 {
-    printf("Inner\n");
     for(int i=0; i < B3.size; i++)
         for(int j=0; j < B1.height; j++)
             for(int k=0; k < B2.size; k++)
