@@ -34,6 +34,7 @@ struct block {
     block(int size, int startAddress, int H) : size(size), start(startAddress), height(H), data(new vector<double>(size*H)){}
     block() : size(0), start(0), height(0), data(0){}
 };
+void pack_block(block &B);
 void LU(int numBlocks);
 void checkResult( vector<double> &originalA);
 
@@ -49,7 +50,9 @@ void InitMatrix3();
 void initLoop(int i);
 
 block wrapBlock(block Block);
+block remote_inner( block B1, block B2, block B3, int );
 
+HPX_PLAIN_ACTION( remote_inner, remote_inner_action );
 HPX_PLAIN_ACTION( wrapBlock, wrap_action );
 HPX_PLAIN_ACTION( ProcessBlockOnColumn, column_action );
 HPX_PLAIN_ACTION( ProcessBlockOnRow, row_action );
@@ -131,7 +134,12 @@ void LU( int numBlocks)
         dfArray[0][i][0] = dataflow( unwrapped( &ProcessBlockOnColumn ), async( wrapBlock, blockList[i][0] ), *diag_block);
         first_col = &dfArray[0][i][0];
         for(int j = 1; j < numBlocks; j++) {
-            dfArray[0][i][j] = dataflow( unwrapped( &ProcessInnerBlock ), async( wrapBlock, blockList[i][j]), dfArray[0][0][j], *first_col );
+            dfArray[0][i][j] = dataflow( unwrapped( &remote_inner ),
+                                         async( wrapBlock, 
+                                                blockList[i][j]), 
+                                                dfArray[0][0][j], 
+                                                *first_col , 
+                                                hpx::make_ready_future(j));
         }
     }
     for(int i = 1; i < numBlocks; i++) {
@@ -149,6 +157,30 @@ void LU( int numBlocks)
         }
     }
     wait(*diag_block);
+}
+
+void pack_block( block &B )
+{
+    //printf("size = %d, going to %d\n", B.data->size(), B.size * B.height);
+    for(int i = 0; i < B.height; i++) {
+        for(int j = 0; j < B.size; j++){
+            B.data->at(i* B.size + j) = A[B.start + i*size + j]; 
+        }
+    }
+}
+
+block remote_inner( block B1, block B2, block B3, int col)
+{
+    /*
+    typedef innerBlock_action inner_action;
+    vector<hpx::naming::id_type> localities = hpx::find_all_localities();
+    hpx::naming::id_type const& node = localities[row%localities.size()];
+    pack_block(B1);
+    pack_block(B2);
+    pack_block(B3);
+    return async<inner_action>(node, B1, B2, B3);
+    */
+    return async( ProcessInnerBlock, B1, B2, B3).get();
 }
 
 void getBlockList(vector<vector<block>> &blockList, int numBlocks)
@@ -226,6 +258,7 @@ block ProcessInnerBlock( block B1, block B2, block B3)
     for(int i=0; i < B3.size; i++)
         for(int j=0; j < B1.height; j++)
             for(int k=0; k < B2.size; k++)
+                //B1.data[j*size+k] += -B3.data[j*size+i] * B2.data[i*size+k];
                 A[B1.start+j*size+k] += -A[B3.start+j*size+i] * A[B2.start+i*size+k];
     return B1;
 }
