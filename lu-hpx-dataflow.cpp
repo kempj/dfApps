@@ -147,7 +147,6 @@ void LU( int numBlocks)
             }
         }
     }
-    printf("done allocating futures\n");
     wait(*diag_block);
 }
 
@@ -228,8 +227,8 @@ void checkResult( vector<double> &originalA )
 {
     int errors = 0;
     double temp2;
-    double *L = new double[size*size];
-    double *U = new double[size*size];
+    vector<double> L(size*size, 0);
+    vector<double> U(size*size, 0);
     for(int i=0;i<size;i++)
         for(int j=0;j<size;j++)
             if (i>j)
