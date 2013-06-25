@@ -135,11 +135,8 @@ void LU( int numBlocks)
         first_col = &dfArray[0][i][0];
         for(int j = 1; j < numBlocks; j++) {
             dfArray[0][i][j] = dataflow( unwrapped( &remote_inner ),
-                                         async( wrapBlock, 
-                                                blockList[i][j]), 
-                                                dfArray[0][0][j], 
-                                                *first_col , 
-                                                hpx::make_ready_future(j));
+                                         async( wrapBlock, blockList[i][j]), 
+                                         dfArray[0][0][j], *first_col, hpx::make_ready_future(j) );
         }
     }
     for(int i = 1; i < numBlocks; i++) {
@@ -152,7 +149,9 @@ void LU( int numBlocks)
             dfArray[i][j][i] = dataflow( unwrapped( &ProcessBlockOnColumn ), dfArray[i-1][j][i], *diag_block);
             first_col = &dfArray[i][j][i];
             for(int k = i + 1; k < numBlocks; k++) {
-                dfArray[i][j][k] = dataflow( unwrapped( &ProcessInnerBlock ), dfArray[i-1][j][k], dfArray[i][i][k], *first_col );
+                dfArray[i][j][k] = dataflow( unwrapped( &remote_inner), 
+                                             dfArray[i-1][j][k], dfArray[i][i][k], *first_col,
+                                             hpx::make_ready_future(k));
             }
         }
     }
@@ -171,16 +170,14 @@ void pack_block( block &B )
 
 block remote_inner( block B1, block B2, block B3, int col)
 {
-    /*
     typedef innerBlock_action inner_action;
     vector<hpx::naming::id_type> localities = hpx::find_all_localities();
-    hpx::naming::id_type const& node = localities[row%localities.size()];
+    hpx::naming::id_type const& node = localities[col%localities.size()];
     pack_block(B1);
     pack_block(B2);
     pack_block(B3);
-    return async<inner_action>(node, B1, B2, B3);
-    */
-    return async( ProcessInnerBlock, B1, B2, B3).get();
+    return async<inner_action>(node, B1, B2, B3).get();
+    //return async( ProcessInnerBlock, B1, B2, B3).get();
 }
 
 void getBlockList(vector<vector<block>> &blockList, int numBlocks)
@@ -267,8 +264,8 @@ void checkResult( vector<double> &originalA )
 {
     int errors = 0;
     double temp2;
-    double *L = new double[size*size];
-    double *U = new double[size*size];
+    vector<double> L(size*size, 0);
+    vector<double> U(size*size, 0);
     for(int i=0;i<size;i++)
         for(int j=0;j<size;j++)
             if (i>j)
