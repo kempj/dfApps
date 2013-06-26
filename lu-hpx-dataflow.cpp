@@ -47,9 +47,7 @@ void Print_Matrix(vector<double> &v);
 void InitMatrix3();
 void initLoop(int i);
 
-block wrapBlock(block Block);
 
-HPX_PLAIN_ACTION( wrapBlock, wrap_action );
 HPX_PLAIN_ACTION( ProcessBlockOnColumn, column_action );
 HPX_PLAIN_ACTION( ProcessBlockOnRow, row_action );
 HPX_PLAIN_ACTION( ProcessInnerBlock, innerBlock_action );
@@ -104,11 +102,9 @@ int main (int argc, char *argv[])
     return 0;
 }
 
-block wrapBlock(block Block){
-    return Block;
-}
 void LU( int numBlocks)
 {
+    printf("LU\n");
     hpx::naming::id_type here = hpx::find_here();
     vector<vector<block>> blockList;
     getBlockList(blockList, numBlocks);
@@ -118,19 +114,19 @@ void LU( int numBlocks)
     for(int i = 0; i < numBlocks; i++){
         dfArray[i].resize(numBlocks);
         for(int j = 0; j < numBlocks; j++){
-            dfArray[i][j].resize(numBlocks);
+            dfArray[i][j].resize(numBlocks, hpx::make_ready_future(block()));
         }
     }
     dfArray[0][0][0] = async( ProcessDiagonalBlock, blockList[0][0] );
     diag_block = &dfArray[0][0][0];
     for(int i = 1; i < numBlocks; i++) {
-        dfArray[0][0][i] = dataflow( unwrapped( &ProcessBlockOnRow ), async( wrapBlock, blockList[0][i] ), *diag_block);
+        dfArray[0][0][i] = dataflow( unwrapped( &ProcessBlockOnRow ), hpx::make_ready_future( blockList[0][i] ), *diag_block);
     }
     for(int i = 1; i < numBlocks; i++) {
-        dfArray[0][i][0] = dataflow( unwrapped( &ProcessBlockOnColumn ), async( wrapBlock, blockList[i][0] ), *diag_block);
+        dfArray[0][i][0] = dataflow( unwrapped( &ProcessBlockOnColumn ), hpx::make_ready_future( blockList[i][0] ), *diag_block);
         first_col = &dfArray[0][i][0];
         for(int j = 1; j < numBlocks; j++) {
-            dfArray[0][i][j] = dataflow( unwrapped( &ProcessInnerBlock ), async( wrapBlock, blockList[i][j]), dfArray[0][0][j], *first_col );
+            dfArray[0][i][j] = dataflow( unwrapped( &ProcessInnerBlock ), hpx::make_ready_future( blockList[i][j]), dfArray[0][0][j], *first_col );
         }
     }
     for(int i = 1; i < numBlocks; i++) {
@@ -147,7 +143,7 @@ void LU( int numBlocks)
             }
         }
     }
-    wait(*diag_block);
+    wait(dfArray[numBlocks-1][numBlocks-1][numBlocks-1]);
 }
 
 void getBlockList(vector<vector<block>> &blockList, int numBlocks)
@@ -245,7 +241,6 @@ void checkResult( vector<double> &originalA )
                 temp2+=L[i*size+k]*U[k*size+j];
             if( (originalA[i*size+j]-temp2) / originalA[i*size+j] > 0.1 || (originalA[i*size+j]-temp2) / originalA[i*size+j] < -0.1 ){
                 printf("error:[%d][%d] ", i, j);
-//                printf("\t %f =/= %f \n", originalA[i*size+j], temp2);
                 errors++;
             }
         }
