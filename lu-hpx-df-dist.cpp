@@ -49,11 +49,9 @@ void Print_Matrix(vector<double> &v);
 void InitMatrix3();
 void initLoop(int i);
 
-block wrapBlock(block Block);
 block remote_inner( block B1, block B2, block B3, int );
 
 HPX_PLAIN_ACTION( remote_inner, remote_inner_action );
-HPX_PLAIN_ACTION( wrapBlock, wrap_action );
 HPX_PLAIN_ACTION( ProcessBlockOnColumn, column_action );
 HPX_PLAIN_ACTION( ProcessBlockOnRow, row_action );
 HPX_PLAIN_ACTION( ProcessInnerBlock, innerBlock_action );
@@ -108,9 +106,6 @@ int main (int argc, char *argv[])
     return 0;
 }
 
-block wrapBlock(block Block){
-    return Block;
-}
 void LU( int numBlocks)
 {
     hpx::naming::id_type here = hpx::find_here();
@@ -128,14 +123,14 @@ void LU( int numBlocks)
     dfArray[0][0][0] = async( ProcessDiagonalBlock, blockList[0][0] );
     diag_block = &dfArray[0][0][0];
     for(int i = 1; i < numBlocks; i++) {
-        dfArray[0][0][i] = dataflow( unwrapped( &ProcessBlockOnRow ), async( wrapBlock, blockList[0][i] ), *diag_block);
+        dfArray[0][0][i] = dataflow( unwrapped( &ProcessBlockOnRow ), hpx::make_ready_future( blockList[0][i] ), *diag_block);
     }
     for(int i = 1; i < numBlocks; i++) {
-        dfArray[0][i][0] = dataflow( unwrapped( &ProcessBlockOnColumn ), async( wrapBlock, blockList[i][0] ), *diag_block);
+        dfArray[0][i][0] = dataflow( unwrapped( &ProcessBlockOnColumn ), hpx::make_ready_future( blockList[i][0] ), *diag_block);
         first_col = &dfArray[0][i][0];
         for(int j = 1; j < numBlocks; j++) {
             dfArray[0][i][j] = dataflow( unwrapped( &remote_inner ),
-                                         async( wrapBlock, blockList[i][j]), 
+                                         hpx::make_ready_future( blockList[i][j] ), 
                                          dfArray[0][0][j], *first_col, hpx::make_ready_future(j) );
         }
     }
@@ -160,7 +155,6 @@ void LU( int numBlocks)
 
 void pack_block( block &B )
 {
-    //printf("size = %d, going to %d\n", B.data->size(), B.size * B.height);
     for(int i = 0; i < B.height; i++) {
         for(int j = 0; j < B.size; j++){
             B.data->at(i* B.size + j) = A[B.start + i*size + j]; 

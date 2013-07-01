@@ -32,47 +32,37 @@ int main(int argc, char** argv)
         exit(0);
     }
     gap = atof(argv[1]);
-    int i,ii,j,a,b,c,d;
-    double t1,t2,total;
     int chunk = atoi(argv[4]);
-
     unsigned int N_a, num_a, N_b, num_b;
-
     char **seq_a = openFile(argv[2], N_a, num_a);
     char **seq_b = openFile(argv[3], N_b, num_b);
+    double t1,t2,total;
 
     int **H = new int*[N_a + 1];
-
-    for(i=0; i< N_a + 1; i++)
+    for(int i=0; i< N_a + 1; i++)
         H[i] = new int[N_b + 1];
-
-    for(i=0;i<=N_a;i++){
-        for(j=0;j<=N_b;j++){
+    for(int i=0;i<=N_a;i++){
+        for(int j=0;j<=N_b;j++){
             H[i][j]=0;
         }
     }
 
     int temp[4];
-    int H_max = 0.;
-    int i_max=0,j_max=0;
-    int current_i,current_j;
-    int next_i;
-    int next_j;
+    int H_max = 0, i_max=0, j_max=0;
+    int current_i, current_j, next_i, next_j;
     int tick=0;
-
     int waves = N_a + N_b +1; 
     int wave, elements, np, mp;
     int min = 0;
 
-    for(a=0; a < num_a; a++) {
-        for(c=0;c<=N_a;c++){
-            for(d=0;d<=N_b;d++){
+    for(int a=0; a < num_a; a++) {
+        for(int c=0;c<=N_a;c++){
+            for(int d=0;d<=N_b;d++){
                 H[c][d]=0;
             }
         }
         t1 = omp_get_wtime();
-
-#pragma omp parallel firstprivate(a, gap, waves) private(temp, wave, ii, i) shared(np, mp, elements)
+#pragma omp parallel firstprivate(a, gap, waves) private(temp, wave, i) shared(np, mp, elements)
         {
 #pragma omp master
             {
@@ -90,11 +80,11 @@ int main(int argc, char** argv)
                         np = N_a-1+1;
                         mp = wave-(N_a-1)+1;
                     }
-                    for(ii = 0; ii < elements; ii+=chunk) {
+                    for(int ii = 0; ii < elements; ii+=chunk) {
                         min = MIN(elements,ii + chunk);
 #pragma omp task firstprivate(ii, np, mp, chunk, elements)
                         {
-                            for (i = ii; i < min; i++) {
+                            for (int i = ii; i < min; i++) {
                                 temp[0] = H[(np-i)-1][(mp+i)-1] + similarity(seq_a[a][(np-i)-1],seq_b[a][(mp+i)-1]); 
                                 temp[1] = H[(np-i)-1][(mp+i)]-gap;                  
                                 temp[2] = H[(np-i)][(mp+i)-1]-gap;
