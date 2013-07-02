@@ -2,12 +2,17 @@
 #include <sys/time.h>
 #include <algorithm>
 #include <vector>
-#include <future>
+#include <hpx/hpx_main.hpp>
+#include <hpx/include/lcos.hpp>
+#include <hpx/include/actions.hpp>
+
 #define  MIN(x, y)  (x < y)?x:y
 #define  MAX(x, y)  (x > y)?x:y
 
 using std::vector;
-using std::future;
+using hpx::lcos::future;
+using hpx::lcos::wait;
+using hpx::async;
 inline int similarity(char x, char y) {
     return((x==y)?2:-1);
 }
@@ -21,7 +26,7 @@ unsigned long GetTickCount()
 
 int find_array_max(int array[],int length);
 char** openFile(char* fileName, unsigned int &N, unsigned int &num);
-void sw( char *seq_a, char *seq_b, int size_a, int size_b);
+void sw(char *seq_a, char *seq_b, int size_a, int size_b);
 void innerloop(int start, int end, char *seq_a, char *seq_b, int b_offset, int a_offset);
 
 int gap, chunk_size;
@@ -39,7 +44,7 @@ int main(int argc, char** argv)
     unsigned int size_a, num_a, size_b, num_b;
     char **seq_a = openFile(argv[2], size_a, num_a);
     char **seq_b = openFile(argv[3], size_b, num_b);
-    double t1,t2,total;
+    double t1, t2, total = 0;
 
     H = new int*[size_a + 1];
     for(int i=0; i< size_a + 1; i++)
@@ -55,6 +60,7 @@ int main(int argc, char** argv)
         total += t2 - t1; 
     }
     printf("Time for Smith-Watterman in secs: %f \n", total / 1000000);
+    return 0;
 }
 
 void sw(char *seq_a, char *seq_b, int size_a, int size_b)
@@ -79,11 +85,9 @@ void sw(char *seq_a, char *seq_b, int size_a, int size_b)
         }
         for(int ii = 0; ii < elements; ii+=chunk_size) {
             end = MIN(elements,ii + chunk_size);
-            futures.push_back(async(std::launch::async, innerloop, ii, end, seq_a, seq_b, b_offset, a_offset));
+            futures.push_back(async(innerloop, ii, end, seq_a, seq_b, b_offset, a_offset));
         }
-        for(int i = 0; i < futures.size(); i++) {
-            futures[i].wait();
-        }
+        wait(futures);
     }
 }
 
