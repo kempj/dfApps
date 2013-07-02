@@ -1,9 +1,12 @@
 default: hpx-futures
 
-all: omp cpp11 hpx-futures
+all: omp cpp11 hpx-futures serial
 
 omp: sw_omp.cpp
 	g++ sw_omp.cpp -o sw_omp -fopenmp -O3
+
+serial: sw_serial.cpp
+	g++ sw_serial.cpp -o sw -O3
 
 cpp11: sw_futures.cpp
 	g++ sw_futures.cpp -o sw -std=c++11 -lpthread -O3
