@@ -74,23 +74,23 @@ int main (int argc, char *argv[])
     unsigned long t1, t2;
     vector<double> originalA;
     int numBlocks = 1;
+    bool runCheck = false;
 
     if( argc > 1 )
         size = atoi(argv[1]);
     if( argc > 2 )
         numBlocks = atoi(argv[2]);
+    if( argc > 3 )
+        runCheck = true;
     printf("size = %d, numBlocks = %d\n", size, numBlocks);
 
     A.resize(size*size, 0);
     L.resize(size*size, 0);
     U.resize(size*size, 0);
-    t1 = GetTickCount();
     InitMatrix3();
-    t2 = GetTickCount();
     originalA.reserve(size*size);
     for(int i = 0; i < size * size; i++)
         originalA[i] = A[i];
-    printf("init done, time = %f\n", (t2-t1)/1000000.0);
 
     t1 = GetTickCount();
     if(numBlocks == 1)
@@ -102,7 +102,8 @@ int main (int argc, char *argv[])
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000.0);
     
-    checkResult( originalA );
+    if( runCheck )
+        checkResult( originalA );
     return 0;
 }
 

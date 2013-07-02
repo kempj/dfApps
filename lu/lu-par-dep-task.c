@@ -211,7 +211,6 @@ void ProcessDiagonalBlock(double *A, int L1, int N)
     for (i=0;i<L1;i++)
         for (j=i+1;j<L1;j++){
             A[j*N+i]/=A[i*N+i];
-            /*       DAXPY(&A[j*N+(i+1)],&A[i*N+(i+1)] ,-A[j*N+i],L1-(i+1),1); */
             for (k=i+1;k<L1;k++)
                 A[j*N+k] = A[j*N+k] - A[j*N+i]*A[i*N+k];
         }
@@ -227,7 +226,6 @@ void ProcessBlockOnColumn(double *A, double *D, int L1, int L2, int N)
     for (i=0;i<L1;i++)
         for (j=0;j<L2;j++){
             A[j*N+i]/=D[i*N+i];
-            /*       DAXPY(&A[j*N+(i+1)],&D[i*N+(i+1)],-A[j*N+i],L1-(i+1),1); */
             for (k=i+1;k<L1;k++)
                 A[j*N+k]+=-A[j*N+i]*D[i*N+k];
         }
@@ -242,7 +240,6 @@ void ProcessBlockOnRow(double *A, double *D, int L1, int L3, int N)
     int i,j,k;
     for (i=0;i<L1;i++)
         for (j=i+1;j<L1;j++)
-            /*       DAXPY(&A[N*j],&A[N*i],-D[j*N+i],L3,1); */
             for (k=0;k<L3;k++)
                 A[j*N+k]+=-D[j*N+i]*A[i*N+k];
 }
@@ -258,7 +255,6 @@ void ProcessInnerBlock(double *A, double *R, double *C, int L1, int L2, int L3, 
     int i,j,k;
     for (i=0;i<L1;i++)
         for (j=0;j<L2;j++)
-            /*       DAXPY(&A[N*j],&R[N*i],-C[j*N+i],L3,1); */
             for (k=0;k<L3;k++)
                 A[j*N+k]+=-C[j*N+i]*R[i*N+k];
 

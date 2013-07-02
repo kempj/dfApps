@@ -44,6 +44,7 @@ int main (int argc, char *argv[])
     if( argc > 2 )
         numBlocks = atoi(argv[2]);
 
+        
     printf("size = %d, numBlocks = %d\n", size, numBlocks);
     A  = (double*)calloc( size*size, sizeof(double) );
     A2 = (double*)calloc( size*size, sizeof(double) );
@@ -56,9 +57,8 @@ int main (int argc, char *argv[])
     InitMatrix3( A, size );
     memcpy( A2, A, size*size*sizeof(double) );
     LU( A, size, numBlocks);
-#ifdef CHECK
-    checkResult( A, A2, size);
-#endif
+    if( argc > 3 )
+        checkResult( A, A2, size);
     free(A);
     free(A2);
     return 0;

@@ -56,25 +56,26 @@ int main (int argc, char *argv[])
 {
     unsigned long t1, t2;
     int size = 100, numBlocks = 1;
+    bool runCheck = false;
     if( argc > 1 )
         size = atoi(argv[1]);
     if( argc > 2 )
         numBlocks = atoi(argv[2]);
+    if( argc > 3 )
+        runCheck = true;
     printf("size = %d, numBlocks = %d\n", size, numBlocks);
     A.resize(size*size, 0);
     L.resize(size*size, 0);
     U.resize(size*size, 0);
-    t1 = GetTickCount();
     InitMatrix3( size );
-    t2 = GetTickCount();
     vector<double> A2;
     A2.reserve(size*size);
     for(int i = 0; i < size * size; i++)
         A2[i] = A[i];
-    printf("init done, time = %f\n", (t2-t1)/1000000.0);
     LU( size, numBlocks);
    
-    checkResult( A2, size);
+    if(runCheck)
+        checkResult( A2, size);
     return 0;
 }
 

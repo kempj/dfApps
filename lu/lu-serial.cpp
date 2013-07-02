@@ -55,9 +55,8 @@ int main (int argc, char *argv[])
     InitMatrix3( A, size );
     memcpy( A2, A, size*size*sizeof(double) );
     LU( A, size, numBlocks);
-#ifdef CHECK
+    if( argc > 3 )
     checkResult( A, A2, size);
-#endif
     free(A);
     free(A2);
     return 0;
