@@ -4,7 +4,8 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
-#include <hpx/hpx_main.hpp>
+#include <hpx/hpx_init.hpp>
+#include <hpx/include/threads.hpp>
 #include <hpx/include/lcos.hpp>
 #include <hpx/include/actions.hpp>
 
@@ -16,13 +17,6 @@ using hpx::lcos::wait;
 using hpx::async;
 
 struct block {
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-        ar & size;
-        ar & start;
-        ar & height;
-    }
     int size;
     int start;
     int height;
@@ -47,11 +41,6 @@ void Print_Matrix(vector<double> &v, int numBlocks, int size);
 void InitMatrix3( int size);
 void initLoop(int i, int size);
 
-HPX_PLAIN_ACTION(ProcessBlockOnColumn, column_action);
-HPX_PLAIN_ACTION(ProcessBlockOnRow, row_action);
-HPX_PLAIN_ACTION(ProcessInnerBlock, innerBlock_action);
-HPX_PLAIN_ACTION(initLoop, init_action);
-
 vector<double> A;
 vector<double> L;
 vector<double> U;
@@ -62,7 +51,17 @@ unsigned long GetTickCount()
     return (tv.tv_sec * 1000000) + (tv.tv_usec);
 }
 
-int main (int argc, char *argv[])
+int main(int argc, char *argv[])
+{
+    using namespace boost::assign;
+    std::vector<std::string> cfg;
+    cfg += "hpx.os_threads=" +
+        boost::lexical_cast<std::string>(hpx::threads::hardware_concurrency());
+
+    return hpx::init(argc, argv, cfg);
+}
+
+int hpx_main (int argc, char *argv[])
 {
     bool runCheck = false;
     int size = 100, numBlocks = 1;
@@ -84,7 +83,7 @@ int main (int argc, char *argv[])
     LU( size, numBlocks);
     if(runCheck) 
         checkResult( A2, size);
-    return 0;
+    return hpx::finalize();
 }
 
 void LU( int size, int numBlocks)
@@ -155,16 +154,12 @@ void ProcessDiagonalBlock( int size, block B)
 void stage2( int size, int offset, vector<vector<block>> &blocks)
 {
     int numBlocks = blocks[0].size();
-    column_action blockCol;
-    row_action blockRow;
     vector<future<void>> futures;
     futures.reserve(blocks.size()*2);
 
     for(int i=offset + 1; i<numBlocks; i++){
-        futures.push_back( async(blockCol, hpx::find_here(), size, blocks[i][offset], blocks[offset][offset]));
-        //ProcessBlockOnColumn( size, blocks[i][offset], blocks[offset][offset]);
-        //ProcessBlockOnRow(    size, blocks[offset][i], blocks[offset][offset]);
-        futures.push_back( async(blockRow, hpx::find_here(), size, blocks[offset][i], blocks[offset][offset]));
+        futures.push_back( async(&ProcessBlockOnColumn, size, blocks[i][offset], blocks[offset][offset]));
+        futures.push_back( async(&ProcessBlockOnRow, size, blocks[offset][i], blocks[offset][offset]));
     }
     wait(futures);
 }
@@ -172,7 +167,7 @@ void stage2( int size, int offset, vector<vector<block>> &blocks)
 void ProcessBlockOnColumn( int size, block B1, block B2)
 {
     for(int i=0; i < B2.size; i++) {
-        for(int j=0; j < B1.height; j++){//was B1.size
+        for(int j=0; j < B1.height; j++){
             A[B1.start+j*size+i] /= A[B2.start+i*size+i];
             for(int k = i+1; k < B2.size; k++) {
                 A[B1.start+j*size+k] += -A[B1.start+j*size+i] * A[B2.start+i*size+k];
@@ -191,14 +186,12 @@ void ProcessBlockOnRow( int size, block B1, block B2)
 
 void stage3( int size, int offset, vector<vector<block>> &blocks)
 {
-    innerBlock_action blockInner;
     int numBlocks = blocks[0].size();
     vector<future<void>> futures;
     futures.reserve(blocks.size() * blocks.size());
     for(int i=offset+1; i < numBlocks; i++) {
         for(int j=offset+1; j < numBlocks; j++){
-            futures.push_back( async(blockInner, hpx::find_here(), size, blocks[i][j], blocks[offset][j], blocks[i][offset]));
-        //ProcessInnerBlock( size, blocks[i][j], blocks[offset][j], blocks[i][offset]);
+            futures.push_back( async(&ProcessInnerBlock, size, blocks[i][j], blocks[offset][j], blocks[i][offset]));
         }
     }
     wait(futures);
@@ -266,7 +259,6 @@ void InitMatrix3( int size)
 {
     vector<future<void>> futures;
     futures.reserve(size);
-    init_action innerLoop;
     for(int i = 0; i < size; i++)
         for(int j = 0; j < size; j++){
             if(i >= j)
@@ -279,7 +271,7 @@ void InitMatrix3( int size)
                 U[i*size + j] = 0;
         }
     for(int i = 0; i < size; i++) {
-        futures.push_back( async(innerLoop, hpx::find_here(), i, size));
+        futures.push_back( async(&initLoop, i, size));
     }
     wait(futures);
         
