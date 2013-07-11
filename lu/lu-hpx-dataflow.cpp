@@ -1,80 +1,27 @@
 // Static blocked LU Decomposition
-// lcos::local::dataflow(f, a0, a1, a2);
-// is equivalent to:
-// hpx::when_all(a0, a1, a2).then(unwrapped([](std::vector<hpx::future<T> > const & fs){ return f(fs[0], fs[1], fs[2]); }));
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/time.h>
-
-#include <hpx/hpx_main.hpp>
-#include <hpx/include/lcos.hpp>
-#include <hpx/include/actions.hpp>
-
-#include <hpx/lcos/local/dataflow.hpp>
-#include <hpx/util/unwrapped.hpp>
-#include <vector>
-
-using hpx::util::unwrapped;
-using std::vector;
-using hpx::lcos::future;
-using hpx::lcos::wait;
-using hpx::async;
-using hpx::lcos::local::dataflow;
-using hpx::when_all;
-using hpx::make_ready_future;
-
-struct block {
-    template<class Archive>
-        void serialize(Archive & ar, const unsigned int version)
-        {
-            ar & size;
-            ar & start;
-            ar & height;
-        }
-    int size;
-    int start;
-    int height;
-    block(int size, int startAddress, int H) : size(size), start(startAddress), height(H){}
-    block() : size(0), start(0), height(0){}
-};
-void LU(int numBlocks);
-void checkResult( vector<double> &originalA);
-
-block ProcessDiagonalBlock( block B);
-block ProcessBlockOnColumn( block B1, block B2);
-block ProcessBlockOnRow( block B1, block B2);
-block ProcessInnerBlock( block B1, block B2, block B3);
-
-void getBlockList(vector<vector<block>> &blocks, int numBlocks);
-
-void Print_Matrix(vector<double> &v);
-void InitMatrix3();
-void initLoop(int i);
-
-
-HPX_PLAIN_ACTION( ProcessBlockOnColumn, column_action );
-HPX_PLAIN_ACTION( ProcessBlockOnRow, row_action );
-HPX_PLAIN_ACTION( ProcessInnerBlock, innerBlock_action );
-HPX_PLAIN_ACTION( initLoop, init_action );
-HPX_PLAIN_ACTION( ProcessDiagonalBlock, diag_action );
+#include "LU.h"
 
 vector<double> A;
 vector<double> L;
 vector<double> U;
-int size = 100;
-unsigned long GetTickCount()
+int size = 1000;
+
+int main(int argc, char *argv[])
 {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (tv.tv_sec * 1000000) + (tv.tv_usec);
+    using namespace boost::assign;
+    std::vector<std::string> cfg;
+    cfg += "hpx.os_threads=" +
+        boost::lexical_cast<std::string>(hpx::threads::hardware_concurrency());
+
+    return hpx::init(argc, argv, cfg);
 }
 
-int main (int argc, char *argv[])
+int hpx_main (int argc, char *argv[])
 {
     unsigned long t1, t2;
     vector<double> originalA;
-    int numBlocks = 1;
+    int numBlocks = 10;
     bool runCheck = false;
 
     if( argc > 1 )
@@ -88,30 +35,33 @@ int main (int argc, char *argv[])
     A.resize(size*size, 0);
     L.resize(size*size, 0);
     U.resize(size*size, 0);
-    InitMatrix3();
-    originalA.reserve(size*size);
-    for(int i = 0; i < size * size; i++)
-        originalA[i] = A[i];
-
+    InitMatrix3(A, L, U, size);
+    if(runCheck) {
+        originalA.reserve(size*size);
+        for(int i = 0; i < size * size; i++) {
+            originalA[i] = A[i];
+        }
+    }
     t1 = GetTickCount();
-    if(numBlocks == 1)
+    if(numBlocks == 1) {
         ProcessDiagonalBlock(block(size, 0, size));
-    else if( numBlocks > 1)
+    } else if( numBlocks > 1) {
+        printf("LU\n");
         LU(numBlocks);
-    else
+    } else { 
         printf("Error: numBlocks must be greater than 0.\n");
+    }
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000.0);
     
-    if(runCheck)
+    if(runCheck) {
         checkResult( originalA );
-    return 0;
+    }
+    return hpx::finalize();
 }
 
 void LU( int numBlocks)
 {
-    printf("LU\n");
-    hpx::naming::id_type here = hpx::find_here();
     vector<vector<block>> blockList;
     getBlockList(blockList, numBlocks);
     vector<vector<vector<future<block>>>> dfArray(numBlocks);
@@ -126,40 +76,40 @@ void LU( int numBlocks)
     dfArray[0][0][0] = async( ProcessDiagonalBlock, blockList[0][0] );
     diag_block = &dfArray[0][0][0];
     for(int i = 1; i < numBlocks; i++) {
-        //dataflow( unwrapped( &ProcessBlockOnRow ), hpx::make_ready_future( blockList[0][i] ), *diag_block);
-        dfArray[0][0][i] = when_all( make_ready_future( blockList[0][i] ), *diag_block).then( 
-                                unwrapped( [](vector<future<block>> const & fs){ return ProcessBlockOnRow( fs[0].get(), fs[1].get() ); } ));
+        dataflow( unwrapped( &ProcessBlockOnRow ), hpx::make_ready_future( blockList[0][i] ), *diag_block);
+        //dfArray[0][0][i] = when_all( make_ready_future( blockList[0][i] ), *diag_block).then( 
+        //                        unwrapped( [](vector<future<block>> const & fs){ return ProcessBlockOnRow( fs[0].get(), fs[1].get() ); } ));
     }
-    // dataflow( unwrapped( &ProcessBlockOnColumn ), hpx::make_ready_future( blockList[i][0] ), *diag_block);
     for(int i = 1; i < numBlocks; i++) {
-        dfArray[0][i][0] = when_all( make_ready_future( blockList[i][0] ), *diag_block).
-                                then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessBlockOnColumn(fs[0].get(), fs[1].get()); }));
+        dfArray[0][i][0] = dataflow( unwrapped( &ProcessBlockOnColumn ), hpx::make_ready_future( blockList[i][0] ), *diag_block);
+        //dfArray[0][i][0] = when_all( make_ready_future( blockList[i][0] ), *diag_block).
+        //                        then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessBlockOnColumn(fs[0].get(), fs[1].get()); }));
         first_col = &dfArray[0][i][0];
         for(int j = 1; j < numBlocks; j++) {
-            // dataflow( unwrapped( &ProcessInnerBlock ), hpx::make_ready_future( blockList[i][j]), dfArray[0][0][j], *first_col );
-            dfArray[0][i][j] = when_all( make_ready_future( blockList[i][j]), dfArray[0][0][j], *first_col ).
-                                then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessInnerBlock(fs[0].get(), fs[1].get(), fs[2].get()); }));
+            dfArray[0][i][j] = dataflow( unwrapped( &ProcessInnerBlock ), hpx::make_ready_future( blockList[i][j]), dfArray[0][0][j], *first_col );
+            //dfArray[0][i][j] = when_all( make_ready_future( blockList[i][j]), dfArray[0][0][j], *first_col ).
+            //                    then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessInnerBlock(fs[0].get(), fs[1].get(), fs[2].get()); }));
         }
     }
     for(int i = 1; i < numBlocks; i++) {
-        // dataflow( unwrapped( &ProcessDiagonalBlock ), dfArray[i-1][i][i]);
-        dfArray[i][i][i] = when_all( dfArray[i-1][i][i]).
-                                then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessDiagonalBlock(fs[0].get()); }));
+        dfArray[i][i][i] = dataflow( unwrapped( &ProcessDiagonalBlock ), dfArray[i-1][i][i]);
+        //dfArray[i][i][i] = when_all( dfArray[i-1][i][i]).
+        //                        then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessDiagonalBlock(fs[0].get()); }));
         diag_block = &dfArray[i][i][i];
         for(int j = i + 1; j < numBlocks; j++){
-            // dataflow( unwrapped(&ProcessBlockOnRow), dfArray[i-1][i][j], *diag_block);
-            dfArray[i][i][j] = when_all( dfArray[i-1][i][j], *diag_block).
-                                then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessBlockOnRow(fs[0].get(), fs[1].get()); }));
+            dfArray[i][i][j] = dataflow( unwrapped(&ProcessBlockOnRow), dfArray[i-1][i][j], *diag_block);
+            //dfArray[i][i][j] = when_all( dfArray[i-1][i][j], *diag_block).
+            //                    then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessBlockOnRow(fs[0].get(), fs[1].get()); }));
         }
         for(int j = i + 1; j < numBlocks; j++){
-            // dataflow( unwrapped( &ProcessBlockOnColumn ), dfArray[i-1][j][i], *diag_block);
-            dfArray[i][j][i] = when_all( dfArray[i-1][j][i], *diag_block).
-                                then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessBlockOnColumn(fs[0].get(), fs[1].get()); }));
+            dfArray[i][j][i] = dataflow( unwrapped( &ProcessBlockOnColumn ), dfArray[i-1][j][i], *diag_block);
+            //dfArray[i][j][i] = when_all( dfArray[i-1][j][i], *diag_block).
+            //                    then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessBlockOnColumn(fs[0].get(), fs[1].get()); }));
             first_col = &dfArray[i][j][i];
             for(int k = i + 1; k < numBlocks; k++) {
-                // dataflow( unwrapped( &ProcessInnerBlock ), dfArray[i-1][j][k], dfArray[i][i][k], *first_col );
-                dfArray[i][j][k] = when_all( dfArray[i-1][j][k], dfArray[i][i][k], *first_col).
-                                    then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessInnerBlock(fs[0].get(), fs[1].get(), fs[2].get()); }));
+                dfArray[i][j][k] = dataflow( unwrapped( &ProcessInnerBlock ), dfArray[i-1][j][k], dfArray[i][i][k], *first_col );
+                //dfArray[i][j][k] = when_all( dfArray[i-1][j][k], dfArray[i][i][k], *first_col).
+                //                    then(unwrapped([](std::vector<hpx::future<block> > const & fs){ return ProcessInnerBlock(fs[0].get(), fs[1].get(), fs[2].get()); }));
             }
         }
     }
@@ -266,48 +216,10 @@ void checkResult( vector<double> &originalA )
         }
     if(errors > 0){
         printf("A:\n");
-        Print_Matrix(A);
+        Print_Matrix(A, size);
         printf("originalA:\n");
-        Print_Matrix(originalA);
+        Print_Matrix(originalA, size);
     }
 
     printf("Errors = %d \n", errors);
-}
-
-void Print_Matrix(vector<double> &v)
-{
-    printf( "\n" );
-    for(int i = 0; i < size; i++){
-        for(int j = 0; j < size; j++)
-            printf( "%5.1f, ", v[i*size + j] );
-        printf( "\n" );
-    }
-    printf( "\n" );
-}
-
-void InitMatrix3()
-{
-    vector<future<void>> futures;
-    futures.reserve(size);
-    for(int i = 0; i < size; i++)
-        for(int j = 0; j < size; j++){
-            if(i >= j)
-                L[i*size + j] = i-j+1;
-            else
-                L[i*size + j] = 0;
-            if(i <= j)
-                U[i*size + j] = j-i+1;
-            else
-                U[i*size + j] = 0;
-        }
-    for(int i = 0; i < size; i++) {
-        futures.push_back( async( initLoop, i));
-    }
-    wait(futures);
-}
-
-void initLoop(int i) {
-    for(int j = 0; j < size; j++)
-        for(int k = 0; k < size; k++)
-            A[i*size + j] += L[i*size + k] * U[k*size + j];
 }

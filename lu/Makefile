@@ -4,14 +4,17 @@ all: default hpx-futures omp serial cpp11 dataflow-local
 
 default: dist
 	
-dist: lu-hpx-df-dist.cpp
-	c++ -o lu_dist lu-hpx-df-dist.cpp `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_dist
+LUutils.o: lu_utils.cpp
+	g++ -o lu_utils.o -c lu_utils.cpp `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_utils
 
-dataflow-local: lu-hpx-dataflow.cpp
-	c++ -o lu_df lu-hpx-dataflow.cpp `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_df
+dist: lu-hpx-df-dist.cpp
+	g++ -o lu_dist lu-hpx-df-dist.cpp `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_dist
+
+dataflow-local: lu-hpx-dataflow.cpp lu_utils.o
+	g++ -o lu_df lu-hpx-dataflow.cpp lu_utils.o --std=c++11 `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_df
 
 hpx-futures: lu-hpx-futures.cpp
-	c++ -o lu_hpx lu-hpx-futures.cpp `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_hpx
+	g++ -o lu_hpx lu-hpx-futures.cpp `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_hpx
 
 omp: lu-par-omp-task.c
 	g++ lu-par-omp-task.c -o lu_omp -fopenmp -O3
