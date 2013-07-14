@@ -4,7 +4,7 @@ all: default hpx-futures omp serial cpp11 dataflow-local
 
 default: dist
 	
-LUutils.o: lu_utils.cpp
+lu_utils.o: lu_utils.cpp
 	g++ -o lu_utils.o -c lu_utils.cpp `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_utils
 
 dist: lu-hpx-df-dist.cpp
