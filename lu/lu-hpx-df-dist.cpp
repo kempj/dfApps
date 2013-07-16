@@ -18,7 +18,7 @@ using hpx::lcos::wait;
 using hpx::async;
 using hpx::lcos::local::dataflow;
 using hpx::util::unwrapped;
-
+/*
 struct block {
     template<class Archive>
         void serialize(Archive & ar, const unsigned int version)
@@ -34,6 +34,7 @@ struct block {
     block(int size, int startAddress, int H) : size(size), start(startAddress), height(H), data(new vector<double>(size*H)){}
     block() : size(0), start(0), height(0), data(0){}
 };
+*/
 void pack_block(block &B);
 void LU(int numBlocks);
 void checkResult( vector<double> &originalA);
