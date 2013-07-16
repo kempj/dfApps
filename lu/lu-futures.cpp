@@ -6,10 +6,12 @@
 #include <future>
 #include <vector>
 
+#include "lu_utils.h"
+
 using std::vector;
 using std::future;
 using std::async;
-
+/*
 struct block {
     template<class Archive>
     void serialize(Archive & ar, const unsigned int version)
@@ -24,6 +26,7 @@ struct block {
     block(int size, int startAddress, int H) : size(size), start(startAddress), height(H){}
     block() : size(0), start(0), height(0){}
 };
+*/
 void LU( int size, int numBlocks);
 void checkResult( vector<double> &A2, int size);
 
@@ -43,15 +46,16 @@ void InitMatrix3( int size);
 void initLoop(int i, int size);
 
 vector<double> A;
-vector<double> L;
-vector<double> U;
+//vector<double> L;
+//vector<double> U;
+/*
 unsigned long GetTickCount()
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (tv.tv_sec * 1000000) + (tv.tv_usec);
 }
-
+*/
 int main (int argc, char *argv[])
 {
     unsigned long t1, t2;
@@ -65,8 +69,8 @@ int main (int argc, char *argv[])
         runCheck = true;
     printf("size = %d, numBlocks = %d\n", size, numBlocks);
     A.resize(size*size, 0);
-    L.resize(size*size, 0);
-    U.resize(size*size, 0);
+    //L.resize(size*size, 0);
+    //U.resize(size*size, 0);
     InitMatrix3( size );
     vector<double> A2;
     A2.reserve(size*size);
@@ -148,15 +152,11 @@ void stage2( int size, int offset, vector<vector<block>> &blocks)
 {
     int numBlocks = blocks[0].size();
     vector<future<void>> futures;
-//    futures.reserve(blocks.size()*2);
 
     for(int i=offset + 1; i<numBlocks; i++){
         futures.push_back( async(std::launch::async,  ProcessBlockOnColumn, size, blocks[i][offset], blocks[offset][offset]));
-        //ProcessBlockOnColumn( size, blocks[i][offset], blocks[offset][offset]);
-        //ProcessBlockOnRow(    size, blocks[offset][i], blocks[offset][offset]);
         futures.push_back( async(std::launch::async, ProcessBlockOnRow, size, blocks[offset][i], blocks[offset][offset]));
     }
-    //wait(futures);
     for(int i = 0; i < futures.size(); i++)
         futures[i].wait();
 }
@@ -164,7 +164,7 @@ void stage2( int size, int offset, vector<vector<block>> &blocks)
 void ProcessBlockOnColumn( int size, block B1, block B2)
 {
     for(int i=0; i < B2.size; i++) {
-        for(int j=0; j < B1.height; j++){//was B1.size
+        for(int j=0; j < B1.height; j++){
             A[B1.start+j*size+i] /= A[B2.start+i*size+i];
             for(int k = i+1; k < B2.size; k++) {
                 A[B1.start+j*size+k] += -A[B1.start+j*size+i] * A[B2.start+i*size+k];
@@ -191,7 +191,6 @@ void stage3( int size, int offset, vector<vector<block>> &blocks)
             futures.push_back( async(std::launch::async, ProcessInnerBlock, size, blocks[i][j], blocks[offset][j], blocks[i][offset]));
         }
     }
-    //wait(futures);
     for(int i = 0; i < futures.size(); i++)
         futures[i].wait();
 }
@@ -206,7 +205,7 @@ void ProcessInnerBlock( int size, block B1, block B2, block B3)
         }
     }
 }
-
+/*
 void checkResult( vector<double> &A2, int size) 
 {
     int errors = 0;
@@ -282,3 +281,4 @@ void initLoop(int i, int size) {
             for(int k = 0; k < size; k++)
                 A[i*size + j] += L[i*size + k] * U[k*size + j];
 }
+*/

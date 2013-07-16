@@ -30,8 +30,11 @@ void initLU( vector<double> &L, vector<double> &U, int i, int size)
     }
 }
 
-void InitMatrix3( vector<double> &L, vector<double> &U, int size )
+void InitMatrix3( int size )
 {
+    vector<double> L, U;
+    L.reserve(size*size);
+    U.reserve(size*size);
     vector<future<void>> futures, LUfutures;
     futures.reserve(size);
     LUfutures.reserve(size);

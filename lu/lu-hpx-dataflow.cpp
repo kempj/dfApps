@@ -21,8 +21,6 @@ int hpx_main (int argc, char *argv[])
     int numBlocks = 10;
     unsigned long t1, t2;
     bool runCheck = false;
-    vector<double> L;
-    vector<double> U;
 
     if( argc > 1 )
         size = atoi(argv[1]);
@@ -33,9 +31,7 @@ int hpx_main (int argc, char *argv[])
     printf("size = %d, numBlocks = %d\n", size, numBlocks);
 
     A.resize(size*size, 0);
-    L.resize(size*size, 0);
-    U.resize(size*size, 0);
-    InitMatrix3(L, U, size);
+    InitMatrix3( size );
     if(runCheck) {
         printf("Error checking enabled\n");
         originalA.reserve(size*size);
@@ -47,7 +43,6 @@ int hpx_main (int argc, char *argv[])
     if(numBlocks == 1) {
         ProcessDiagonalBlock( size, block(size, 0, size));
     } else if( numBlocks > 1) {
-        printf("LU\n");
         LU( size, numBlocks);
     } else { 
         printf("Error: numBlocks must be greater than 0.\n");
