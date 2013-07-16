@@ -13,7 +13,6 @@ using std::future;
 using std::async;
 
 void LU( int size, int numBlocks);
-void checkResult( vector<double> &A2, int size);
 
 void stage1( int size, int offset, vector<vector<block>> &blocks);
 void stage2( int size, int offset, vector<vector<block>> &blocks);
@@ -41,8 +40,6 @@ int main (int argc, char *argv[])
         runCheck = true;
     printf("size = %d, numBlocks = %d\n", size, numBlocks);
     A.resize(size*size, 0);
-    //L.resize(size*size, 0);
-    //U.resize(size*size, 0);
     InitMatrix3( size );
     vector<double> A2;
     A2.reserve(size*size);
