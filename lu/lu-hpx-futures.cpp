@@ -11,11 +11,13 @@
 
 #include <vector>
 
+#include "lu_utils.h"
+
 using std::vector;
 using hpx::lcos::future;
 using hpx::lcos::wait;
 using hpx::async;
-
+/*
 struct block {
     int size;
     int start;
@@ -23,6 +25,7 @@ struct block {
     block(int size, int startAddress, int H) : size(size), start(startAddress), height(H){}
     block() : size(0), start(0), height(0){}
 };
+*/
 void LU( int size, int numBlocks);
 void checkResult( vector<double> &A2, int size);
 
@@ -37,11 +40,12 @@ void ProcessInnerBlock( int size, block B1, block B2, block B3);
 
 void getBlockList(vector<vector<block>> &blocks, int size, int numBlocks);
 
-void Print_Matrix(vector<double> &v, int numBlocks, int size);
-void InitMatrix3( int size);
-void initLoop(int i, int size);
+//void Print_Matrix(vector<double> &v, int numBlocks, int size);
+//void InitMatrix3( int size);
+//void initLoop(int i, int size);
 
 vector<double> A;
+/*
 vector<double> L;
 vector<double> U;
 unsigned long GetTickCount()
@@ -50,6 +54,7 @@ unsigned long GetTickCount()
     gettimeofday(&tv, NULL);
     return (tv.tv_sec * 1000000) + (tv.tv_usec);
 }
+*/
 
 int main(int argc, char *argv[])
 {
@@ -73,8 +78,8 @@ int hpx_main (int argc, char *argv[])
         runCheck = true;
     printf("size = %d, numBlocks = %d\n", size, numBlocks);
     A.resize(size*size, 0);
-    L.resize(size*size, 0);
-    U.resize(size*size, 0);
+//    L.resize(size*size, 0);
+//    U.resize(size*size, 0);
     InitMatrix3( size );
     vector<double> A2;
     A2.reserve(size*size);
@@ -207,7 +212,7 @@ void ProcessInnerBlock( int size, block B1, block B2, block B3)
         }
     }
 }
-
+/*
 void checkResult( vector<double> &A2, int size) 
 {
     int errors = 0;
@@ -281,3 +286,4 @@ void initLoop(int i, int size) {
             for(int k = 0; k < size; k++)
                 A[i*size + j] += L[i*size + k] * U[k*size + j];
 }
+*/

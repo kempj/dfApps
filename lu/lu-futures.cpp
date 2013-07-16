@@ -26,10 +26,6 @@ void ProcessInnerBlock( int size, block B1, block B2, block B3);
 
 void getBlockList(vector<vector<block>> &blocks, int size, int numBlocks);
 
-void Print_Matrix(vector<double> &v, int numBlocks, int size);
-void InitMatrix3( int size);
-void initLoop(int i, int size);
-
 vector<double> A;
 
 int main (int argc, char *argv[])
