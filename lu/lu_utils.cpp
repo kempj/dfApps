@@ -8,36 +8,46 @@ using std::future;
 using std::vector;
 using std::async;
 
+
+void initA( vector<double> &L, vector<double> &U, int i, int size)
+{
+    for(int j = 0; j < size; j++)
+        for(int k = 0; k < size; k++)
+            A[i * size + j] += L[i * size + k] * U[k*size + j];
+}
+
+void initLU( vector<double> &L, vector<double> &U, int i, int size)
+{
+    for(int j = 0; j < size; j++){
+        if(i >= j)
+            L[i*size + j] = i-j+1;
+        else
+            L[i*size + j] = 0;
+        if(i <= j)
+            U[i*size + j] = j-i+1;
+        else
+            U[i*size + j] = 0;
+    }
+}
+
 void InitMatrix3( vector<double> &L, vector<double> &U, int size )
 {
-    vector<future<void>> futures;
+    vector<future<void>> futures, LUfutures;
     futures.reserve(size);
+    LUfutures.reserve(size);
     for(int i = 0; i < size; i++) {
-        for(int j = 0; j < size; j++){
-            if(i >= j)
-                L[i*size + j] = i-j+1;
-            else
-                L[i*size + j] = 0;
-            if(i <= j)
-                U[i*size + j] = j-i+1;
-            else
-                U[i*size + j] = 0;
-        }
+        LUfutures.push_back( async( std::launch::async, &initLU, std::ref(L), std::ref(U), i, size));
+    }
+    for(int i = 0; i < LUfutures.size(); i++) {
+        LUfutures[i].wait();
     }
     for(int i = 0; i < size; i++) {
-        futures.push_back( async( std::launch::async, &initLoop, std::ref(L), std::ref(U), i, size));
+        futures.push_back( async( std::launch::async, &initA, std::ref(L), std::ref(U), i, size));
     }
     for(int i = 0; i < futures.size(); i++) {
         futures[i].wait();
     }
 //    hpx::lcos::wait(futures);
-}
-
-void initLoop( vector<double> &L, vector<double> &U ,int i, int size)
-{
-    for(int j = 0; j < size; j++)
-        for(int k = 0; k < size; k++)
-            A[i*size + j] += L[i*size + k] * U[k*size + j];
 }
 
 void Print_Matrix(vector<double> &v, int size)
