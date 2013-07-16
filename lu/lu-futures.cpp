@@ -11,22 +11,7 @@
 using std::vector;
 using std::future;
 using std::async;
-/*
-struct block {
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-        ar & size;
-        ar & start;
-        ar & height;
-    }
-    int size;
-    int start;
-    int height;
-    block(int size, int startAddress, int H) : size(size), start(startAddress), height(H){}
-    block() : size(0), start(0), height(0){}
-};
-*/
+
 void LU( int size, int numBlocks);
 void checkResult( vector<double> &A2, int size);
 
@@ -46,16 +31,7 @@ void InitMatrix3( int size);
 void initLoop(int i, int size);
 
 vector<double> A;
-//vector<double> L;
-//vector<double> U;
-/*
-unsigned long GetTickCount()
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (tv.tv_sec * 1000000) + (tv.tv_usec);
-}
-*/
+
 int main (int argc, char *argv[])
 {
     unsigned long t1, t2;
@@ -205,80 +181,3 @@ void ProcessInnerBlock( int size, block B1, block B2, block B3)
         }
     }
 }
-/*
-void checkResult( vector<double> &A2, int size) 
-{
-    int errors = 0;
-    double temp2;
-    vector<double> L(size*size, 0);
-    vector<double> U(size*size, 0);
-    for(int i=0;i<size;i++)
-        for(int j=0;j<size;j++)
-            if (i>j)
-                L[i*size+j] = A[i*size+j];
-            else
-                U[i*size+j] = A[i*size+j];
-    for(int i=0;i<size;i++)
-        L[i*size+i] = 1;
-
-    for(int i=0;i<size;i++)
-        for(int j=0;j<size;j++){
-            temp2=0;
-            for(int k=0;k<size;k++)
-                temp2+=L[i*size+k]*U[k*size+j];
-            if( (A2[i*size+j]-temp2) / A2[i*size+j] > 0.1 || (A2[i*size+j]-temp2) / A2[i*size+j] < -0.1 ){
-                printf("error:[%d][%d]\n", i, j);
-                printf("\t %f =/= %f \n", A2[i*size+j], temp2);
-                errors++;
-            }
-        }
-    if(errors > 0){
-        printf("A:\n");
-        Print_Matrix(A, size, size);
-        printf("A2:\n");
-        Print_Matrix(A2, size, size);
-    }
-
-    printf("Errors = %d \n", errors);
-}
-
-void Print_Matrix(vector<double> &v, int size1, int size)
-{
-    printf( "\n" );
-    for(int i = 0; i < size1; i++){
-        for(int j = 0; j < size; j++)
-            printf( "%5.2f, ", v[i*size + j] );
-        printf( "\n" );
-    }
-    printf( "\n" );
-}
-
-void InitMatrix3( int size)
-{
-    vector<future<void>> futures;
-    futures.reserve(size);
-    for(int i = 0; i < size; i++)
-        for(int j = 0; j < size; j++){
-            if(i >= j)
-                L[i*size + j] = i-j+1;
-            else
-                L[i*size + j] = 0;
-            if(i <= j)
-                U[i*size + j] = j-i+1;
-            else
-                U[i*size + j] = 0;
-        }
-    for(int i = 0; i < size; i++) {
-        futures.push_back( async(std::launch::async, initLoop, i, size));
-    }
-    //wait(futures);
-    for(int i = 0; i < futures.size(); i++)
-        futures[i].wait();
-        
-}
-void initLoop(int i, int size) {
-        for(int j = 0; j < size; j++)
-            for(int k = 0; k < size; k++)
-                A[i*size + j] += L[i*size + k] * U[k*size + j];
-}
-*/
