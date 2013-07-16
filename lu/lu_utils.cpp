@@ -2,18 +2,17 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <hpx/hpx.hpp>
-#include <hpx/include/lcos.hpp>
+#include <future>
 
-using hpx::lcos::future;
+using std::future;
 using std::vector;
-using hpx::async;
+using std::async;
 
 void InitMatrix3( vector<double> &L, vector<double> &U, int size )
 {
     vector<future<void>> futures;
     futures.reserve(size);
-    for(int i = 0; i < size; i++)
+    for(int i = 0; i < size; i++) {
         for(int j = 0; j < size; j++){
             if(i >= j)
                 L[i*size + j] = i-j+1;
@@ -24,13 +23,17 @@ void InitMatrix3( vector<double> &L, vector<double> &U, int size )
             else
                 U[i*size + j] = 0;
         }
-    for(int i = 0; i < size; i++) {
-        futures.push_back( async( &initLoop, std::ref(L), std::ref(U), i, size));
     }
-    hpx::lcos::wait(futures);
+    for(int i = 0; i < size; i++) {
+        futures.push_back( async( std::launch::async, &initLoop, std::ref(L), std::ref(U), i, size));
+    }
+    for(int i = 0; i < futures.size(); i++) {
+        futures[i].wait();
+    }
+//    hpx::lcos::wait(futures);
 }
 
-void initLoop( vector<double> const& L, vector<double> const& U ,int i, int size)
+void initLoop( vector<double> &L, vector<double> &U ,int i, int size)
 {
     for(int j = 0; j < size; j++)
         for(int k = 0; k < size; k++)
