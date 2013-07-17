@@ -5,7 +5,7 @@
 #include <sys/time.h>
 #include <future>
 
-#include "lu_utils.h"
+//#include "lu_utils.h"
 #include "lu-local.h"
 #include <vector>
 
@@ -18,7 +18,7 @@ void LU( int size, int numBlocks);
 void stage1( int size, int offset, vector<vector<block>> &blocks);
 void stage2( int size, int offset, vector<vector<block>> &blocks);
 void stage3( int size, int offset, vector<vector<block>> &blocks);
-void getBlockList(vector<vector<block>> &blocks, int size, int numBlocks);
+//void getBlockList(vector<vector<block>> &blocks, int size, int numBlocks);
 
 vector<double> A;
 
@@ -54,7 +54,7 @@ void LU( int size, int numBlocks)
 
     t1 = GetTickCount();
     if(numBlocks > 1) {
-        getBlockList(blockList, size, numBlocks);
+        getBlockList(blockList, numBlocks, size);
 
         for(int i = 0; i < blockList.size(); i++) {
             stage1( size, i, blockList );
@@ -67,7 +67,7 @@ void LU( int size, int numBlocks)
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000.0);
 }
-
+/*
 void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
 {
     int blockSize, start, height;
@@ -96,6 +96,7 @@ void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
         }
     }
 }
+*/
 
 void stage1( int size, int offset, vector<vector<block>> &blocks)
 {
@@ -108,8 +109,9 @@ void stage2( int size, int offset, vector<vector<block>> &blocks)
     vector<future<block>> futures;
 
     for(int i=offset + 1; i<numBlocks; i++){
-        futures.push_back( async(std::launch::async,  ProcessBlockOnColumn, size, blocks[i][offset], blocks[offset][offset]));
-        futures.push_back( async(std::launch::async, ProcessBlockOnRow, size, blocks[offset][i], blocks[offset][offset]));
+        //(std::launch::async
+        futures.push_back( async( std::launch::async, ProcessBlockOnColumn, size, blocks[i][offset], blocks[offset][offset]));
+        futures.push_back( async( std::launch::async, ProcessBlockOnRow, size, blocks[offset][i], blocks[offset][offset]));
     }
     for(int i = 0; i < futures.size(); i++)
         futures[i].wait();
@@ -122,7 +124,7 @@ void stage3( int size, int offset, vector<vector<block>> &blocks)
     futures.reserve(blocks.size() * blocks.size());
     for(int i=offset+1; i < numBlocks; i++) {
         for(int j=offset+1; j < numBlocks; j++){
-            futures.push_back( async(std::launch::async, ProcessInnerBlock, size, blocks[i][j], blocks[offset][j], blocks[i][offset]));
+            futures.push_back( async( std::launch::async, ProcessInnerBlock, size, blocks[i][j], blocks[offset][j], blocks[i][offset]));
         }
     }
     for(int i = 0; i < futures.size(); i++)

@@ -1,7 +1,5 @@
 #include <vector>
 
-extern std::vector<double> A;
-
 struct block {
     int size;
     int start;

@@ -2,12 +2,23 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+#ifndef USE_HPX
 #include <future>
-
 using std::future;
-using std::vector;
 using std::async;
+#else
+#include <hpx/include/lcos.hpp>
+using hpx::lcos::future;
+using hpx::async;
+#endif
 
+using std::vector;
+//TODO: cannot call hpx version from futures
+//      or futures version from hpx.
+//      macros?
+
+extern std::vector<double> A;
 
 void initA( vector<double> &L, vector<double> &U, int i, int size)
 {
@@ -39,18 +50,34 @@ void InitMatrix3( int size )
     futures.reserve(size);
     LUfutures.reserve(size);
     for(int i = 0; i < size; i++) {
-        LUfutures.push_back( async( std::launch::async, &initLU, std::ref(L), std::ref(U), i, size));
+#ifndef USE_HPX
+        LUfutures.push_back( std::async( std::launch::async, &initLU, std::ref(L), std::ref(U), i, size));
+#else
+        LUfutures.push_back( async( &initLU, std::ref(L), std::ref(U), i, size));
+#endif
     }
+#ifndef USE_HPX
     for(int i = 0; i < LUfutures.size(); i++) {
         LUfutures[i].wait();
     }
+#else
+    hpx::lcos::wait(LUfutures);
+#endif
+
     for(int i = 0; i < size; i++) {
-        futures.push_back( async( std::launch::async, &initA, std::ref(L), std::ref(U), i, size));
+#ifndef USE_HPX
+        futures.push_back( std::async( std::launch::async, &initA, std::ref(L), std::ref(U), i, size));
+#else
+        futures.push_back( async( &initA, std::ref(L), std::ref(U), i, size));
+#endif
     }
+#ifndef USE_HPX
     for(int i = 0; i < futures.size(); i++) {
         futures[i].wait();
     }
-//    hpx::lcos::wait(futures);
+#else
+    hpx::lcos::wait(futures);
+#endif
 }
 
 void Print_Matrix(vector<double> &v, int size)

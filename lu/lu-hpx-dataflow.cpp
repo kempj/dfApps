@@ -1,61 +1,28 @@
 // Static blocked LU Decomposition
 
-#include "lu-hpx-dataflow.h"
+#include <stdio.h>
+
+
+#include <hpx/hpx_init.hpp>
+#include <hpx/include/threads.hpp>
+#include <hpx/include/lcos.hpp>
+#include <hpx/include/actions.hpp>
+#include <hpx/lcos/local/dataflow.hpp>
+#include <hpx/util/unwrapped.hpp>
+//#include <vector>
+
 #include "lu-local.h"
+//#include "lu_utils.h"
 
+using std::vector;
+using hpx::util::unwrapped;
+using hpx::lcos::future;
+using hpx::lcos::wait;
+using hpx::async;
+using hpx::lcos::local::dataflow;
+using hpx::when_all;
+using hpx::make_ready_future;
 vector<double> A;
-
-int main(int argc, char *argv[])
-{
-    using namespace boost::assign;
-    std::vector<std::string> cfg;
-    cfg += "hpx.os_threads=" +
-        boost::lexical_cast<std::string>(hpx::threads::hardware_concurrency());
-
-    return hpx::init(argc, argv, cfg);
-}
-
-int hpx_main (int argc, char *argv[])
-{
-    vector<double> originalA;
-    int size = 1000;
-    int numBlocks = 10;
-    unsigned long t1, t2;
-    bool runCheck = false;
-
-    if( argc > 1 )
-        size = atoi(argv[1]);
-    if( argc > 2 )
-        numBlocks = atoi(argv[2]);
-    if( argc > 3 )
-        runCheck = true;
-    printf("size = %d, numBlocks = %d\n", size, numBlocks);
-
-    A.resize(size*size, 0);
-    InitMatrix3( size );
-    if(runCheck) {
-        printf("Error checking enabled\n");
-        originalA.reserve(size*size);
-        for(int i = 0; i < size * size; i++) {
-            originalA[i] = A[i];
-        }
-    }
-    t1 = GetTickCount();
-    if(numBlocks == 1) {
-        ProcessDiagonalBlock( size, block(size, 0, size));
-    } else if( numBlocks > 1) {
-        LU( size, numBlocks);
-    } else { 
-        printf("Error: numBlocks must be greater than 0.\n");
-    }
-    t2 = GetTickCount();
-    printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000.0);
-    
-    if(runCheck) {
-        checkResult( originalA,  size );
-    }
-    return hpx::finalize();
-}
 
 void LU( int size, int numBlocks)
 {
@@ -102,6 +69,58 @@ void LU( int size, int numBlocks)
     wait(dfArray[numBlocks-1][numBlocks-1][numBlocks-1]);
 }
 
+int hpx_main (int argc, char *argv[])
+{
+    vector<double> originalA;
+    int size = 1000;
+    int numBlocks = 10;
+    unsigned long t1, t2;
+    bool runCheck = false;
+
+    if( argc > 1 )
+        size = atoi(argv[1]);
+    if( argc > 2 )
+        numBlocks = atoi(argv[2]);
+    if( argc > 3 )
+        runCheck = true;
+    printf("size = %d, numBlocks = %d\n", size, numBlocks);
+
+    A.resize(size*size, 0);
+    InitMatrix3( size );
+    if(runCheck) {
+        printf("Error checking enabled\n");
+        originalA.reserve(size*size);
+        for(int i = 0; i < size * size; i++) {
+            originalA[i] = A[i];
+        }
+    }
+    t1 = GetTickCount();
+    if(numBlocks == 1) {
+        ProcessDiagonalBlock( size, block(size, 0, size));
+    } else if( numBlocks > 1) {
+        LU( size, numBlocks);
+    } else { 
+        printf("Error: numBlocks must be greater than 0.\n");
+    }
+    t2 = GetTickCount();
+    printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000.0);
+    
+    if(runCheck) {
+        checkResult( originalA,  size );
+    }
+    return hpx::finalize();
+}
+
+int main(int argc, char *argv[])
+{
+    using namespace boost::assign;
+    std::vector<std::string> cfg;
+    cfg += "hpx.os_threads=" +
+        boost::lexical_cast<std::string>(hpx::threads::hardware_concurrency());
+
+    return hpx::init(argc, argv, cfg);
+}
+/*
 void getBlockList(vector<vector<block>> &blockList, int numBlocks, int size)
 {
     int blockSize, start, height;
@@ -130,3 +149,4 @@ void getBlockList(vector<vector<block>> &blockList, int numBlocks, int size)
         }
     }
 }
+*/
