@@ -12,7 +12,6 @@ struct block {
 
 unsigned long GetTickCount();
 void InitMatrix3(int size);
-//void InitMatrix3( std::vector<double> &L, std::vector<double> &U, int size);
 void Print_Matrix( std::vector<double> &v, int size);
 void checkResult( std::vector<double> &originalA, int size );
 

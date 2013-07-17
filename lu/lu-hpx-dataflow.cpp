@@ -1,6 +1,7 @@
 // Static blocked LU Decomposition
 
-#include "LU.h"
+#include "lu-hpx-dataflow.h"
+#include "lu-local.h"
 
 vector<double> A;
 
@@ -129,7 +130,7 @@ void getBlockList(vector<vector<block>> &blockList, int numBlocks, int size)
         }
     }
 }
-
+/*
 block ProcessDiagonalBlock( int size,  block B)
 {
     for(int i = 0; i < B.size; i++) {
@@ -173,4 +174,4 @@ block ProcessInnerBlock( int size, block B1, block B2, block B3)
                 A[B1.start+j*size+k] += -A[B3.start+j*size+i] * A[B2.start+i*size+k];
     return B1;
 }
-
+*/
