@@ -17,8 +17,8 @@ dist: lu-hpx-df-dist.cpp
 dataflow-local: lu-hpx-dataflow.cpp lu_utils.o lu-local.o
 	g++ -o lu_df lu-hpx-dataflow.cpp lu_utils.o lu-local.o `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_df
 
-hpx-futures: lu-hpx-futures.cpp lu_utils.o
-	g++ -o lu_hpx lu-hpx-futures.cpp lu_utils.o `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_hpx
+hpx-futures: lu-hpx-futures.cpp lu_utils.o lu-local.o
+	g++ -o lu_hpx lu-hpx-futures.cpp lu_utils.o lu-local.o `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_hpx
 
 omp: lu-par-omp-task.c
 	g++ lu-par-omp-task.c -o lu_omp -fopenmp -O3
@@ -26,5 +26,5 @@ omp: lu-par-omp-task.c
 serial:lu-serial.cpp
 	g++ lu-serial.cpp -o lu -O3 -fopenmp 
 
-cpp11: lu-futures.cpp lu_utils.o
-	g++ lu-futures.cpp lu_utils.o -o lu_cpp -O3 -lpthread -std=c++11
+cpp11: lu-futures.cpp lu_utils.o lu-local.o
+	g++ lu-futures.cpp lu_utils.o lu-local.o -o lu_cpp -O3 -lpthread -std=c++11
