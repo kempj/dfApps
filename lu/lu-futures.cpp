@@ -18,7 +18,6 @@ void LU( int size, int numBlocks);
 void stage1( int size, int offset, vector<vector<block>> &blocks);
 void stage2( int size, int offset, vector<vector<block>> &blocks);
 void stage3( int size, int offset, vector<vector<block>> &blocks);
-//void getBlockList(vector<vector<block>> &blocks, int size, int numBlocks);
 
 vector<double> A;
 
@@ -67,36 +66,6 @@ void LU( int size, int numBlocks)
     t2 = GetTickCount();
     printf("Time for LU-decomposition in secs: %f \n", (t2-t1)/1000000.0);
 }
-/*
-void getBlockList(vector<vector<block>> &blockList, int size, int numBlocks)
-{
-    int blockSize, start, height;
-    for(int i=0; i < numBlocks; i++) 
-        blockList.push_back(vector<block>());
-
-    height = size/numBlocks;
-    if(size%numBlocks > 0)
-        height += 1;
-    for(int i=0; i < numBlocks; i++) {
-        if(i < size % numBlocks) {
-            blockSize = size/numBlocks+1;
-            start = (size/numBlocks+1)*i;
-        } else {
-            blockSize = size/numBlocks;
-            start = (size/numBlocks+1)*(size%numBlocks) + (size/numBlocks)*(i-size%numBlocks);
-        }
-        blockList[0].push_back( block( blockSize, start, height));
-    }
-    for(int i = 1; i < numBlocks; i++) {
-        height = blockList[0][i].size;
-        for(int j = 0; j < numBlocks; j++) {
-            blockSize = blockList[0][j].size;
-            start = blockList[i-1][j].start + blockList[i-1][0].height * size;
-            blockList[i].push_back( block( blockSize, start, height));
-        }
-    }
-}
-*/
 
 void stage1( int size, int offset, vector<vector<block>> &blocks)
 {
@@ -109,7 +78,6 @@ void stage2( int size, int offset, vector<vector<block>> &blocks)
     vector<future<block>> futures;
 
     for(int i=offset + 1; i<numBlocks; i++){
-        //(std::launch::async
         futures.push_back( async( std::launch::async, ProcessBlockOnColumn, size, blocks[i][offset], blocks[offset][offset]));
         futures.push_back( async( std::launch::async, ProcessBlockOnRow, size, blocks[offset][i], blocks[offset][offset]));
     }

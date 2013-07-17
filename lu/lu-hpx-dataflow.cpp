@@ -1,18 +1,13 @@
 // Static blocked LU Decomposition
 
 #include <stdio.h>
-
-
 #include <hpx/hpx_init.hpp>
 #include <hpx/include/threads.hpp>
 #include <hpx/include/lcos.hpp>
-#include <hpx/include/actions.hpp>
 #include <hpx/lcos/local/dataflow.hpp>
 #include <hpx/util/unwrapped.hpp>
-//#include <vector>
 
 #include "lu-local.h"
-//#include "lu_utils.h"
 
 using std::vector;
 using hpx::util::unwrapped;
@@ -120,33 +115,3 @@ int main(int argc, char *argv[])
 
     return hpx::init(argc, argv, cfg);
 }
-/*
-void getBlockList(vector<vector<block>> &blockList, int numBlocks, int size)
-{
-    int blockSize, start, height;
-    for(int i=0; i < numBlocks; i++) 
-        blockList.push_back(vector<block>());
-
-    height = size/numBlocks;
-    if(size%numBlocks > 0)
-        height += 1;
-    for(int i=0; i < numBlocks; i++) {
-        if(i < size % numBlocks) {
-            blockSize = size/numBlocks+1;
-            start = (size/numBlocks+1)*i;
-        } else {
-            blockSize = size/numBlocks;
-            start = (size/numBlocks+1)*(size%numBlocks) + (size/numBlocks)*(i-size%numBlocks);
-        }
-        blockList[0].push_back( block( blockSize, start, height));
-    }
-    for(int i = 1; i < numBlocks; i++) {
-        height = blockList[0][i].size;
-        for(int j = 0; j < numBlocks; j++) {
-            blockSize = blockList[0][j].size;
-            start = blockList[i-1][j].start + blockList[i-1][0].height * size;
-            blockList[i].push_back( block( blockSize, start, height));
-        }
-    }
-}
-*/
