@@ -18,12 +18,6 @@ void LU( int size, int numBlocks);
 void stage1( int size, int offset, vector<vector<block>> &blocks);
 void stage2( int size, int offset, vector<vector<block>> &blocks);
 void stage3( int size, int offset, vector<vector<block>> &blocks);
-/*
-void ProcessDiagonalBlock( int size, block B);
-void ProcessBlockOnColumn( int size, block B1, block B2);
-void ProcessBlockOnRow( int size, block B1, block B2);
-void ProcessInnerBlock( int size, block B1, block B2, block B3);
-*/
 void getBlockList(vector<vector<block>> &blocks, int size, int numBlocks);
 
 vector<double> A;
@@ -107,17 +101,7 @@ void stage1( int size, int offset, vector<vector<block>> &blocks)
 {
     ProcessDiagonalBlock( size, blocks[offset][offset] );
 }
-/*
-void ProcessDiagonalBlock( int size, block B)
-{
-    for(int i = 0; i < B.size; i++)
-        for(int j = i+1; j < B.size; j++){
-            A[B.start+j*size+i] /= A[B.start+i*size+i];
-            for(int k = i+1; k < B.size; k++)
-                A[B.start+j*size+k] -= A[B.start+j*size+i] * A[B.start+i*size+k];
-        }
-}
-*/
+
 void stage2( int size, int offset, vector<vector<block>> &blocks)
 {
     int numBlocks = blocks[0].size();
@@ -130,27 +114,7 @@ void stage2( int size, int offset, vector<vector<block>> &blocks)
     for(int i = 0; i < futures.size(); i++)
         futures[i].wait();
 }
-/*
-void ProcessBlockOnColumn( int size, block B1, block B2)
-{
-    for(int i=0; i < B2.size; i++) {
-        for(int j=0; j < B1.height; j++){
-            A[B1.start+j*size+i] /= A[B2.start+i*size+i];
-            for(int k = i+1; k < B2.size; k++) {
-                A[B1.start+j*size+k] += -A[B1.start+j*size+i] * A[B2.start+i*size+k];
-            }
-        }
-    }
-}
 
-void ProcessBlockOnRow( int size, block B1, block B2)
-{
-    for(int i=0; i < B2.size; i++)
-        for(int j=i+1; j < B2.size; j++)
-            for(int k=0; k < B1.size; k++)
-                A[B1.start+j*size+k] += -A[B2.start+j*size+i] * A[B1.start+i*size+k];
-}
-*/
 void stage3( int size, int offset, vector<vector<block>> &blocks)
 {
     int numBlocks = blocks[0].size();
@@ -164,15 +128,3 @@ void stage3( int size, int offset, vector<vector<block>> &blocks)
     for(int i = 0; i < futures.size(); i++)
         futures[i].wait();
 }
-/*
-void ProcessInnerBlock( int size, block B1, block B2, block B3)
-{
-    for(int i=0; i < B3.size; i++){
-        for(int j=0; j < B1.height; j++){
-            for(int k=0; k < B2.size; k++){
-                A[B1.start+j*size+k] += -A[B3.start+j*size+i] * A[B2.start+i*size+k];
-            }
-        }
-    }
-}
-*/
