@@ -20,24 +20,27 @@ using std::vector;
 
 extern std::vector<double> A;
 
-void initA( vector<double> &L, vector<double> &U, int i, int size)
+void initA( vector<double> &L, vector<double> &U, int in, int size, int range)
 {
-    for(int j = 0; j < size; j++)
-        for(int k = 0; k < size; k++)
-            A[i * size + j] += L[i * size + k] * U[k*size + j];
+    for(int i = in; i < in + range; i++) 
+        for(int j = 0; j < size; j++)
+            for(int k = 0; k < size; k++)
+                A[i * size + j] += L[i * size + k] * U[k*size + j];
 }
 
-void initLU( vector<double> &L, vector<double> &U, int i, int size)
+void initLU( vector<double> &L, vector<double> &U, int in, int size, int range)
 {
-    for(int j = 0; j < size; j++){
-        if(i >= j)
-            L[i*size + j] = i-j+1;
-        else
-            L[i*size + j] = 0;
-        if(i <= j)
-            U[i*size + j] = j-i+1;
-        else
-            U[i*size + j] = 0;
+    for(int i = in; i < in + range; i++) {
+        for(int j = 0; j < size; j++){
+            if(i >= j)
+                L[i*size + j] = i-j+1;
+            else
+                L[i*size + j] = 0;
+            if(i <= j)
+                U[i*size + j] = j-i+1;
+            else
+                U[i*size + j] = 0;
+	}
     }
 }
 
@@ -49,12 +52,16 @@ void InitMatrix3( int size )
     vector<future<void>> futures, LUfutures;
     futures.reserve(size);
     LUfutures.reserve(size);
-    for(int i = 0; i < size; i++) {
+    int range = 4;
+    for(int i = 0; i < size; i += range) {
 #ifndef USE_HPX
-        LUfutures.push_back( std::async( std::launch::async, &initLU, std::ref(L), std::ref(U), i, size));
+        LUfutures.push_back( std::async( std::launch::async, &initLU, std::ref(L), std::ref(U), i, size, range));
 #else
-        LUfutures.push_back( async( &initLU, std::ref(L), std::ref(U), i, size));
+        LUfutures.push_back( async( &initLU, std::ref(L), std::ref(U), i, size, range));
 #endif
+    }
+    if(size % range != 0) {
+	    initLU(L, U, size - size % range, size, size % range);
     }
 #ifndef USE_HPX
     for(int i = 0; i < LUfutures.size(); i++) {
@@ -64,12 +71,15 @@ void InitMatrix3( int size )
     hpx::lcos::wait(LUfutures);
 #endif
 
-    for(int i = 0; i < size; i++) {
+    for(int i = 0; i < size; i += range) {
 #ifndef USE_HPX
-        futures.push_back( std::async( std::launch::async, &initA, std::ref(L), std::ref(U), i, size));
+        futures.push_back( std::async( std::launch::async, &initA, std::ref(L), std::ref(U), i, size, range));
 #else
-        futures.push_back( async( &initA, std::ref(L), std::ref(U), i, size));
+        futures.push_back( async( &initA, std::ref(L), std::ref(U), i, size, range));
 #endif
+    }
+    if(size % range != 0) {
+	    initA(L, U, size - size % range, size, size % range);
     }
 #ifndef USE_HPX
     for(int i = 0; i < futures.size(); i++) {
