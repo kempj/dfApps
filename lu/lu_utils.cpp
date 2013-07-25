@@ -14,9 +14,6 @@ using hpx::async;
 #endif
 
 using std::vector;
-//TODO: cannot call hpx version from futures
-//      or futures version from hpx.
-//      macros?
 
 extern std::vector<double> A;
 
@@ -31,16 +28,27 @@ void initA( vector<double> &L, vector<double> &U, int in, int size, int range)
 void initLU( vector<double> &L, vector<double> &U, int in, int size, int range)
 {
     for(int i = in; i < in + range; i++) {
-        for(int j = 0; j < size; j++){
-            if(i >= j)
+        //j = 0?
+        for(int j = 0; j < i; j++) { //i > j
+            L[i*size + j] = i-j+1;
+            U[i*size + j] = 0; 
+        }
+        //i == j
+        L[i*size + i] = 1;
+        U[i*size + i] = 1;
+        for(int j = i + 1; j < size; j++){//i < j
+            L[i*size + j] = 0;
+            U[i*size + j] = j-i+1;
+        }
+/*            if(i > j || i == j)
                 L[i*size + j] = i-j+1;
-            else
+            else // i < j
                 L[i*size + j] = 0;
-            if(i <= j)
+            if(i < j || i == j)
                 U[i*size + j] = j-i+1;
-            else
-                U[i*size + j] = 0;
-	}
+            else // j > i
+                U[i*size + j] = 0; 
+	}*/
     }
 }
 
