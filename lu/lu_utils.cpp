@@ -19,16 +19,21 @@ extern std::vector<double> A;
 
 void initA( vector<double> &L, vector<double> &U, int in, int size, int range)
 {
-    for(int i = in; i < in + range; i++) 
-        for(int j = 0; j < size; j++)
-            for(int k = 0; k < size; k++)
-                A[i * size + j] += L[i * size + k] * U[k*size + j];
+    //TODO: init A using logic in L and U in this loop. Make work on blocks
+    for(int i = in; i < in + range; i++) {
+        for(int j = 0; j < size; j++) {
+            for(int k = 0; k < size; k++) {
+                if( i >= k && k <= j)
+                    A[i * size + j] += (i-k+1)*(j-k+1);
+                //A[i * size + j] += L[i * size + k] * U[k*size + j];
+            }
+        }
+    }
 }
 
 void initLU( vector<double> &L, vector<double> &U, int in, int size, int range)
 {
     for(int i = in; i < in + range; i++) {
-        //j = 0?
         for(int j = 0; j < i; j++) { //i > j
             L[i*size + j] = i-j+1;
             U[i*size + j] = 0; 
@@ -61,6 +66,7 @@ void InitMatrix3( int size )
     futures.reserve(size);
     LUfutures.reserve(size);
     int range = 4;
+    /*
     for(int i = 0; i < size; i += range) {
 #ifndef USE_HPX
         LUfutures.push_back( std::async( std::launch::async, &initLU, std::ref(L), std::ref(U), i, size, range));
@@ -78,7 +84,7 @@ void InitMatrix3( int size )
 #else
     hpx::lcos::wait(LUfutures);
 #endif
-
+*/
     for(int i = 0; i < size; i += range) {
 #ifndef USE_HPX
         futures.push_back( std::async( std::launch::async, &initA, std::ref(L), std::ref(U), i, size, range));

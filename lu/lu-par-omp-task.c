@@ -148,7 +148,7 @@ void stage1(double * const A, const int offset, const int * const sizedim, const
 
 void stage2(double * const A, const int offset, const int * const sizedim, const int * const start, const int size, const int numBlocks)
 {
-    int i, L1, L2, L3;
+    int i = 0, L1 = 0, L2 = 0, L3 = 0;
     L1 = sizedim[0]; 
     /* Processing only one big block in column and row */
     for(i=1;i<numBlocks;i++){

@@ -23,6 +23,9 @@ dist: lu-hpx-df-dist.cpp
 dataflow-local: lu-hpx-dataflow.cpp lu_utils_hpx.o lu-local.o
 	g++ -o lu_df lu-hpx-dataflow.cpp lu_utils_hpx.o lu-local.o `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_df
 
+df-noglobal: lu-hpx-df-noglobal.cpp lu_utils_hpx.o lu-local.o
+	g++ -o lu_df-noglobal lu-hpx-df-noglobal.cpp lu_utils_hpx.o lu-local.o `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_df-noglobal
+
 hpx-futures: lu-hpx-futures.cpp lu_utils_hpx.o lu-local.o
 	g++ -o lu_hpx lu-hpx-futures.cpp lu_utils_hpx.o lu-local.o `pkg-config --cflags --libs hpx_application` -liostreams -DHPX_APPLICATION_NAME=lu_hpx
 
