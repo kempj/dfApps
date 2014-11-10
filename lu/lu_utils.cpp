@@ -4,12 +4,12 @@
 #include <stdio.h>
 
 #ifndef USE_HPX
-#include <future>
+#include <shared_future>
 using std::future;
 using std::async;
 #else
 #include <hpx/include/lcos.hpp>
-using hpx::lcos::future;
+using hpx::lcos::shared_future;
 using hpx::async;
 #endif
 
@@ -62,27 +62,27 @@ void InitMatrix3( int size )
     vector<double> L, U;
     L.reserve(size*size);
     U.reserve(size*size);
-    vector<future<void>> futures, LUfutures;
+    vector<shared_future<void>> futures, LU_futures;
     futures.reserve(size);
-    LUfutures.reserve(size);
+    LU_futures.reserve(size);
     int range = 4;
     /*
     for(int i = 0; i < size; i += range) {
 #ifndef USE_HPX
-        LUfutures.push_back( std::async( std::launch::async, &initLU, std::ref(L), std::ref(U), i, size, range));
+        LU_futures.push_back( std::async( std::launch::async, &initLU, std::ref(L), std::ref(U), i, size, range));
 #else
-        LUfutures.push_back( async( &initLU, std::ref(L), std::ref(U), i, size, range));
+        LU_futures.push_back( async( &initLU, std::ref(L), std::ref(U), i, size, range));
 #endif
     }
     if(size % range != 0) {
 	    initLU(L, U, size - size % range, size, size % range);
     }
 #ifndef USE_HPX
-    for(int i = 0; i < LUfutures.size(); i++) {
-        LUfutures[i].wait();
+    for(int i = 0; i < LU_futures.size(); i++) {
+        LU_futures[i].wait_all();
     }
 #else
-    hpx::lcos::wait(LUfutures);
+    hpx::lcos::wait_all(LU_futures);
 #endif
 */
     for(int i = 0; i < size; i += range) {
@@ -100,7 +100,7 @@ void InitMatrix3( int size )
         futures[i].wait();
     }
 #else
-    hpx::lcos::wait(futures);
+    hpx::lcos::wait_all(futures);
 #endif
 }
 

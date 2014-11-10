@@ -11,8 +11,8 @@
 
 using std::vector;
 using hpx::util::unwrapped;
-using hpx::lcos::future;
-using hpx::lcos::wait;
+using hpx::lcos::shared_future;
+using hpx::lcos::wait_all;
 using hpx::async;
 using hpx::lcos::local::dataflow;
 using hpx::when_all;
@@ -23,9 +23,9 @@ void LU( int size, int numBlocks)
 {
     vector<vector<block>> blockList;
     getBlockList(blockList, numBlocks, size);
-    vector<vector<vector<future<block>>>> dfArray(numBlocks);
-    future<block> *diag_block, *first_col;
-    future<int> fsize = hpx::make_ready_future(size);
+    vector<vector<vector<shared_future<block>>>> dfArray(numBlocks);
+    shared_future<block> *diag_block, *first_col;
+    shared_future<int> fsize = hpx::make_ready_future(size);
 
     for(int i = 0; i < numBlocks; i++){
         dfArray[i].resize( numBlocks );
@@ -33,7 +33,7 @@ void LU( int size, int numBlocks)
             dfArray[i][j].resize( numBlocks, hpx::make_ready_future( block()));
         }
     }
-    //converts blocks to futures for dataflow input in dfArray[0]
+    //converts blocks to shared_futures for dataflow input in dfArray[0]
     dfArray[0][0][0] = async( ProcessDiagonalBlock, size, blockList[0][0] );
     diag_block = &dfArray[0][0][0];
     for(int i = 1; i < numBlocks; i++) {
@@ -46,7 +46,7 @@ void LU( int size, int numBlocks)
             dfArray[0][i][j] = dataflow( unwrapped( &ProcessInnerBlock ), fsize, hpx::make_ready_future( blockList[i][j]), dfArray[0][0][j], *first_col );
         }
     }
-    //bulk of work, entirely in futures
+    //bulk of work, entirely in shared_futures
     for(int i = 1; i < numBlocks; i++) {
         dfArray[i][i][i] = dataflow( unwrapped( &ProcessDiagonalBlock ), fsize, dfArray[i-1][i][i]);
         diag_block = &dfArray[i][i][i];
@@ -61,7 +61,7 @@ void LU( int size, int numBlocks)
             }
         }
     }
-    wait(dfArray[numBlocks-1][numBlocks-1][numBlocks-1]);
+    wait_all(dfArray[numBlocks-1][numBlocks-1][numBlocks-1]);
 }
 
 int hpx_main (int argc, char *argv[])
@@ -113,5 +113,6 @@ int main(int argc, char *argv[])
     cfg += "hpx.os_threads=" +
         boost::lexical_cast<std::string>(hpx::threads::hardware_concurrency());
 
+//    printf("argc = %d\n", argc);
     return hpx::init(argc, argv, cfg);
 }
