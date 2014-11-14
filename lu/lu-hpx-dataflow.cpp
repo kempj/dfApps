@@ -8,6 +8,9 @@
 #include <hpx/util/unwrapped.hpp>
 
 #include "lu-local.h"
+#include <iostream>
+using std::cout;
+using std::endl;
 
 using std::vector;
 using hpx::util::unwrapped;
@@ -22,46 +25,58 @@ vector<double> A;
 void LU( int size, int numBlocks)
 {
     vector<vector<block>> blockList;
-    getBlockList(blockList, numBlocks, size);
-    vector<vector<vector<shared_future<block>>>> dfArray(numBlocks);
+    vector<vector<vector<shared_future<block>>>> dfArray(2);
     shared_future<block> *diag_block, *first_col;
-    shared_future<int> fsize = hpx::make_ready_future(size);
+    shared_future<int> fsize = make_ready_future(size);
 
-    for(int i = 0; i < numBlocks; i++){
+    auto rowOp = unwrapped(&ProcessBlockOnRow);
+    auto colOp = unwrapped(&ProcessBlockOnColumn);
+    auto innerOp = unwrapped(&ProcessInnerBlock);
+    auto diagOp = unwrapped(&ProcessDiagonalBlock);
+
+    getBlockList(blockList, numBlocks, size);
+
+    for(int i = 0; i < 2; i++){
         dfArray[i].resize( numBlocks );
         for(int j = 0; j < numBlocks; j++){
-            dfArray[i][j].resize( numBlocks, hpx::make_ready_future( block()));
+            dfArray[i][j].resize( numBlocks, make_ready_future( block()));
         }
     }
+    vector<vector<shared_future<block>>> &last_array = dfArray[0];
+    vector<vector<shared_future<block>>> &current_array = dfArray[1];
+
     //converts blocks to shared_futures for dataflow input in dfArray[0]
     dfArray[0][0][0] = async( ProcessDiagonalBlock, size, blockList[0][0] );
     diag_block = &dfArray[0][0][0];
     for(int i = 1; i < numBlocks; i++) {
-        dfArray[0][0][i] = dataflow( unwrapped( &ProcessBlockOnRow ), fsize, hpx::make_ready_future( blockList[0][i] ), *diag_block);
+        dfArray[0][0][i] = dataflow( rowOp, fsize, make_ready_future( blockList[0][i] ), *diag_block);
     }
     for(int i = 1; i < numBlocks; i++) {
-        dfArray[0][i][0] = dataflow( unwrapped( &ProcessBlockOnColumn ), fsize, hpx::make_ready_future( blockList[i][0] ), *diag_block);
+        dfArray[0][i][0] = dataflow( colOp, fsize, make_ready_future( blockList[i][0] ), *diag_block);
         first_col = &dfArray[0][i][0];
         for(int j = 1; j < numBlocks; j++) {
-            dfArray[0][i][j] = dataflow( unwrapped( &ProcessInnerBlock ), fsize, hpx::make_ready_future( blockList[i][j]), dfArray[0][0][j], *first_col );
+            dfArray[0][i][j] = dataflow( innerOp, fsize, make_ready_future( blockList[i][j]), dfArray[0][0][j], *first_col);
         }
     }
     //bulk of work, entirely in shared_futures
     for(int i = 1; i < numBlocks; i++) {
-        dfArray[i][i][i] = dataflow( unwrapped( &ProcessDiagonalBlock ), fsize, dfArray[i-1][i][i]);
-        diag_block = &dfArray[i][i][i];
+        last_array = dfArray[i-1];
+        current_array = dfArray[i];
+
+        current_array[i][i] = dataflow( diagOp, fsize, last_array[i][i]);
+        diag_block = &current_array[i][i];
         for(int j = i + 1; j < numBlocks; j++){
-            dfArray[i][i][j] = dataflow( unwrapped(&ProcessBlockOnRow), fsize, dfArray[i-1][i][j], *diag_block);
+            current_array[i][j] = dataflow( rowOp, fsize, last_array[i][j], *diag_block);
         }
         for(int j = i + 1; j < numBlocks; j++){
-            dfArray[i][j][i] = dataflow( unwrapped( &ProcessBlockOnColumn ), fsize, dfArray[i-1][j][i], *diag_block);
-            first_col = &dfArray[i][j][i];
+            current_array[j][i] = dataflow( colOp, fsize, last_array[j][i], *diag_block);
+            first_col = &current_array[j][i];
             for(int k = i + 1; k < numBlocks; k++) {
-                dfArray[i][j][k] = dataflow( unwrapped( &ProcessInnerBlock ), fsize, dfArray[i-1][j][k], dfArray[i][i][k], *first_col );
-            }
+                current_array[j][k] = dataflow( innerOp, fsize, last_array[j][k], current_array[i][k], *first_col);
+           }
         }
     }
-    wait_all(dfArray[numBlocks-1][numBlocks-1][numBlocks-1]);
+    wait_all(current_array[numBlocks-1][numBlocks-1]);
 }
 
 int hpx_main (int argc, char *argv[])
