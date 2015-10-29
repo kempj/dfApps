@@ -26,7 +26,7 @@ int main(int argc, char** argv)
 {
     if(argc!=5){
         printf("Please provide correct number of input arguments: \n");
-        printf("\t1:gap\n\t2:filename\n\tsequence_A\n\t3:filename sequence_B\n\t4:chunk_size_size\n");
+        printf("\t1:gap\n\t2:filename\n\tsequence_A\n\t3:filename sequence_B\n\t4:chunk_size\n");
         exit(0);
     }
     gap = atof(argv[1]);
