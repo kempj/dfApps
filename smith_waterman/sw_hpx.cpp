@@ -11,9 +11,17 @@
 //#define  MAX(x, y)  (x > y)?x:y
 
 using std::vector;
+using std::cout;
+using std::endl;
+using std::cin;
 using hpx::lcos::future;
 using hpx::lcos::wait_all;
 using hpx::async;
+
+
+int gap, chunk_size;
+int **H;
+
 
 inline int similarity(char x, char y) {
     return((x==y)?2:-1);
@@ -26,79 +34,15 @@ unsigned long GetTickCount()
     return (tv.tv_sec * 1000000) + (tv.tv_usec);
 }
 
-int gap, chunk_size;
-int **H;
-
-int hpx_main(int argc, char **argv)
+inline int find_array_max(int array[],int length)
 {
-    gap = atof(argv[1]);
-    chunk_size = atoi(argv[4]);
-    size_t size_a, num_a, size_b, num_b;
-    char **seq_a = openFile(argv[2], size_a, num_a);
-    char **seq_b = openFile(argv[3], size_b, num_b);
-    double t1, t2, total = 0;
-
-    H = new int*[size_a + 1];
-    for(size_t i=0; i< size_a + 1; i++) {
-        H[i] = new int[size_b + 1];
-    }
-    for(size_t seq_num=0; seq_num < num_a; seq_num++) {
-        for(size_t i=0; i<=size_a; i++) {
-            std::fill(H[i], H[i] + (size_b+1), 0);
+    int max = array[0];
+    for(int i = 1; i<length; i++){
+        if(array[i] > max){
+            max = array[i];
         }
-        t1 = GetTickCount();
-        sw(seq_a[seq_num], seq_b[seq_num], size_a, size_b);
-        t2 = GetTickCount();
-        total += t2 - t1; 
     }
-    printf("Time for Smith-Watterman in secs: %f \n", total / 1000000);
-
-    return hpx::finalize();
-}
-
-
-int main(int argc, char** argv)
-{
-    if(argc!=5){
-        printf("Please provide correct number of ia_offsetut arguments: \n");
-        printf("\t1:gap\n\t2:filename\n\tsequence_A\n\t3:filename sequence_B\n\t4:chunk_size\n");
-        exit(0);
-    }
-
-    using namespace boost::assign;
-    std::vector<std::string> cfg;
-    cfg += "hpx.os_threads=" +
-        boost::lexical_cast<std::string>(hpx::threads::hardware_concurrency());
-
-    return hpx::init(argc, argv, cfg);
-}
-
-void sw(char *seq_a, char *seq_b, int size_a, int size_b)
-{
-    int num_waves = size_a + size_b - 1;
-    int elements, a_offset, b_offset, end;
-    vector< future<void> > futures;
-
-    for(int wave = 0; wave < num_waves; ++wave) {
-        if(wave < size_a-1) {
-            elements = wave+1;
-            a_offset = wave+1;
-            b_offset = 1;
-        } else if(wave < size_b) {
-            elements = size_a;
-            a_offset = size_a;
-            b_offset = wave-size_a+2;
-        } else {
-            elements = size_a+size_b-1-wave;
-            a_offset = size_a;
-            b_offset = wave-size_a+2;
-        }
-        for(int ii = 0; ii < elements; ii+=chunk_size) {
-            end = MIN(elements,ii + chunk_size);
-            futures.push_back(async(innerloop, ii, end, seq_a, seq_b, b_offset, a_offset));
-        }
-        wait_all(futures);
-    }
+    return max;
 }
 
 void innerloop(int start, int end, char *seq_a, char *seq_b, int b_offset, int a_offset)
@@ -115,14 +59,15 @@ void innerloop(int start, int end, char *seq_a, char *seq_b, int b_offset, int a
 
 char** openFile(char* fileName, size_t &size, size_t &num)
 {
-    char **seq;
     FILE *fp = fopen(fileName, "r");
     if (fp == NULL) {
-        printf("Error: could not open %s!\n", fileName);
+        cout << "Error: could not open " << fileName << endl;
         exit(0);
     }
     fscanf(fp, "%zu %zu\n", &num, &size);
-    seq = new char*[num];
+    cout << "File " << fileName << " has " << num << " sequences of size " << size << endl;
+
+    char **seq = new char*[num];
 
     for(size_t a=0; a < num; a++) {
         seq[a] = new char[size+1];
@@ -132,14 +77,83 @@ char** openFile(char* fileName, size_t &size, size_t &num)
     return seq;
 }
 
-inline int find_array_max(int array[],int length)
+void sw(char *seq_a, char *seq_b, int size_a, int size_b)
 {
-    int max = array[0];
-    for(int i = 1; i<length; i++){
-        if(array[i] > max){
-            max = array[i];
+    int num_waves = size_a + size_b - 1;
+    int elements, a_offset, b_offset, end;
+    vector< future<void> > futures;
+
+    //Each wave is a diagonal / of the matrix.
+    //Each of these diagonals is broken up into tasks, 
+    // each of which executes chunk_size elements of it
+    for(int wave = 0; wave < num_waves; ++wave) {
+        if(wave < size_a-1) {
+            //If the diagonal starts on the left side of the matrix
+            // and ends on the top part (getting larger each iteration)
+            elements = wave+1;
+            a_offset = wave+1;
+            b_offset = 1;
+        } else if(wave < size_b) {
+            //If the diagonal starts in the lower left corner 
+            // and ends in the upper right corner. (only happens once)
+            elements = size_a;
+            a_offset = size_a;
+            b_offset = wave-size_a+2;
+        } else {
+            //The diagonal starts on the bottom side of the matrix
+            // and ends on the right part (gets smaller every iteration)
+            elements = size_a+size_b-1-wave;
+            a_offset = size_a;
+            b_offset = wave-size_a+2;
         }
+        for(int ii = 0; ii < elements; ii+=chunk_size) {
+            end = MIN(elements,ii + chunk_size);
+            futures.push_back(async(innerloop, ii, end, seq_a, seq_b, b_offset, a_offset));
+        }
+        wait_all(futures);
     }
-    return max;
 }
 
+int hpx_main(int argc, char **argv)
+{
+    gap = atof(argv[1]);
+    chunk_size = atoi(argv[4]);
+    size_t size_a, num_a, size_b, num_b;
+    char **seq_a = openFile(argv[2], size_a, num_a);
+    char **seq_b = openFile(argv[3], size_b, num_b);
+    double total = 0;
+
+    H = new int*[size_a + 1];
+    for(size_t i=0; i< size_a + 1; i++) {
+        H[i] = new int[size_b + 1];
+    }
+    for(size_t seq_num = 0; seq_num < num_a; seq_num++) {
+        for(size_t i = 0; i <= size_a; i++) {
+            std::fill(H[i], H[i] + (size_b+1), 0);
+        }
+        double t1 = GetTickCount();
+        sw(seq_a[seq_num], seq_b[seq_num], size_a, size_b);
+        double t2 = GetTickCount();
+        total += t2 - t1; 
+        cout << "Time for sequence " << seq_num << " in secs: "  << (t2-t1)/1000000 << endl;
+    }
+    cout << "Time for all SW sequences in secs: "  << total/1000000 << endl;
+
+    return hpx::finalize();
+}
+
+int main(int argc, char** argv)
+{
+    if(argc!=5){
+        printf("Please provide correct number of ia_offsetut arguments: \n");
+        printf("\t1:gap\n\t2:filename sequence_A\n\t3:filename sequence_B\n\t4:chunk_size\n");
+        exit(0);
+    }
+
+    using namespace boost::assign;
+    std::vector<std::string> cfg;
+    cfg += "hpx.os_threads=" +
+        boost::lexical_cast<std::string>(hpx::threads::hardware_concurrency());
+
+    return hpx::init(argc, argv, cfg);
+}

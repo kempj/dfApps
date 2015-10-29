@@ -56,10 +56,8 @@ int main(int argc, char** argv)
 
 void sw(int **H, char *seq_a, char *seq_b, int chunk_size, int size_a, int size_b)
 {
-    int H_max = 0, i_max=0, j_max=0;
     int num_waves = size_a + size_b - 1; //note: was +1
     int elements, np, mp;
-    int end;
     int temp[4];
 
     for(int wave = 0; wave < num_waves; ++wave) {
